@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Mail, Lock } from "lucide-react";
+import { Building2, Mail, Lock, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -78,6 +79,17 @@ const Login = () => {
                 <CardDescription>輸入您的登入資訊以存取租戶儀表板</CardDescription>
               </CardHeader>
               <CardContent>
+                <Alert className="mb-4 border-primary/20 bg-primary/5">
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>測試帳號</AlertTitle>
+                  <AlertDescription className="text-sm space-y-1">
+                    <p><strong>信箱：</strong>test@example.com</p>
+                    <p><strong>密碼：</strong>test1234</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      ⚠️ 首次使用請先至「註冊」頁面建立此測試帳號
+                    </p>
+                  </AlertDescription>
+                </Alert>
                 <form onSubmit={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signin-email">電子郵件</Label>
