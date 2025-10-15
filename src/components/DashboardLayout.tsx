@@ -11,8 +11,11 @@ import {
   Bell, 
   Shield,
   ClipboardList,
-  Building2
+  Building2,
+  LogOut
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -32,6 +35,7 @@ const navigation = [
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
+  const { signOut, profile } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,7 +50,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
           </div>
         </div>
 
-        <nav className="space-y-1 p-4">
+        <nav className="flex-1 space-y-1 p-4">
           {navigation.map((item) => {
             const isActive = location.pathname === item.href;
             return (
@@ -66,6 +70,17 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             );
           })}
         </nav>
+
+        <div className="p-4 border-t border-border">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3"
+            onClick={signOut}
+          >
+            <LogOut className="h-4 w-4" />
+            登出
+          </Button>
+        </div>
       </aside>
 
       <div className="pl-64">
@@ -75,7 +90,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
               {navigation.find(item => item.href === location.pathname)?.name || "儀表板"}
             </h1>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">admin@company.com</span>
+              <span className="text-sm text-muted-foreground">
+                {profile?.full_name || profile?.email || "載入中..."}
+              </span>
             </div>
           </div>
         </header>
