@@ -25,6 +25,7 @@ const navigation = [
   { name: "儀表板", href: "/dashboard", icon: LayoutDashboard },
   { name: "預約管理", href: "/bookings", icon: Calendar },
   { name: "乘客管理", href: "/passengers", icon: Users },
+  { name: "成本中心", href: "/cost-centers", icon: Building2 },
   { name: "報表下載", href: "/reports", icon: FileText },
   { name: "API & Webhook", href: "/api-keys", icon: Key },
   { name: "付款發票", href: "/billing", icon: CreditCard },

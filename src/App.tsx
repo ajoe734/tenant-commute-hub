@@ -10,6 +10,11 @@ import Dashboard from "./pages/Dashboard";
 import BookingList from "./pages/BookingList";
 import NewBooking from "./pages/NewBooking";
 import PassengerManagement from "./pages/PassengerManagement";
+import CostCenterManagement from "./pages/CostCenterManagement";
+import ReportManagement from "./pages/ReportManagement";
+import ApiKeyManagement from "./pages/ApiKeyManagement";
+import BillingManagement from "./pages/BillingManagement";
+import NotificationSettings from "./pages/NotificationSettings";
 import DashboardLayout from "./components/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -66,11 +71,21 @@ const App = () => (
               }
             />
             <Route
+              path="/cost-centers"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <CostCenterManagement />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/reports"
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <Dashboard />
+                    <ReportManagement />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
@@ -80,7 +95,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <Dashboard />
+                    <ApiKeyManagement />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
@@ -90,7 +105,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <Dashboard />
+                    <BillingManagement />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
@@ -100,7 +115,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <Dashboard />
+                    <NotificationSettings />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
