@@ -57,8 +57,8 @@ export default function PassengerManagement() {
     } catch (error: any) {
       console.error('Error fetching passengers:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to load passengers',
+        title: '錯誤',
+        description: '無法載入乘客資料',
         variant: 'destructive',
       });
     } finally {
@@ -80,8 +80,8 @@ export default function PassengerManagement() {
         if (error) throw error;
 
         toast({
-          title: 'Success',
-          description: 'Passenger updated successfully',
+          title: '成功',
+          description: '乘客更新成功',
         });
       } else {
         const { error } = await supabase.from('passengers').insert({
@@ -92,8 +92,8 @@ export default function PassengerManagement() {
         if (error) throw error;
 
         toast({
-          title: 'Success',
-          description: 'Passenger added successfully',
+          title: '成功',
+          description: '乘客新增成功',
         });
       }
 
@@ -104,8 +104,8 @@ export default function PassengerManagement() {
     } catch (error: any) {
       console.error('Error saving passenger:', error);
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to save passenger',
+        title: '錯誤',
+        description: error.message || '無法儲存乘客',
         variant: 'destructive',
       });
     }
@@ -124,7 +124,7 @@ export default function PassengerManagement() {
   };
 
   const handleDelete = async (passengerId: string) => {
-    if (!confirm('Are you sure you want to deactivate this passenger?')) return;
+    if (!confirm('確定要停用此乘客嗎？')) return;
 
     try {
       const { error } = await supabase
@@ -135,15 +135,15 @@ export default function PassengerManagement() {
       if (error) throw error;
 
       toast({
-        title: 'Success',
-        description: 'Passenger deactivated successfully',
+        title: '成功',
+        description: '乘客已成功停用',
       });
       fetchPassengers();
     } catch (error: any) {
       console.error('Error deactivating passenger:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to deactivate passenger',
+        title: '錯誤',
+        description: '無法停用乘客',
         variant: 'destructive',
       });
     }
@@ -156,7 +156,7 @@ export default function PassengerManagement() {
           <Card>
             <CardContent className="pt-6">
               <p className="text-center text-muted-foreground">
-                You don't have permission to manage passengers.
+                您沒有權限管理乘客。
               </p>
             </CardContent>
           </Card>
@@ -171,7 +171,7 @@ export default function PassengerManagement() {
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Passenger Management</CardTitle>
+              <CardTitle>乘客管理</CardTitle>
               <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={() => {
@@ -179,18 +179,18 @@ export default function PassengerManagement() {
                     setFormData({ name: '', phone: '', email: '', department: '', notes: '' });
                   }}>
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Passenger
+                    新增乘客
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>
-                      {editingPassenger ? 'Edit Passenger' : 'Add New Passenger'}
+                      {editingPassenger ? '編輯乘客' : '新增乘客'}
                     </DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                      <Label htmlFor="name">Name *</Label>
+                      <Label htmlFor="name">姓名 *</Label>
                       <Input
                         id="name"
                         value={formData.name}
@@ -199,7 +199,7 @@ export default function PassengerManagement() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="phone">Phone *</Label>
+                      <Label htmlFor="phone">電話 *</Label>
                       <Input
                         id="phone"
                         value={formData.phone}
@@ -208,7 +208,7 @@ export default function PassengerManagement() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email">電子郵件</Label>
                       <Input
                         id="email"
                         type="email"
@@ -217,7 +217,7 @@ export default function PassengerManagement() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="department">Department</Label>
+                      <Label htmlFor="department">部門</Label>
                       <Input
                         id="department"
                         value={formData.department}
@@ -225,7 +225,7 @@ export default function PassengerManagement() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="notes">Notes</Label>
+                      <Label htmlFor="notes">備註</Label>
                       <Textarea
                         id="notes"
                         value={formData.notes}
@@ -233,9 +233,9 @@ export default function PassengerManagement() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button type="submit">Save</Button>
+                      <Button type="submit">儲存</Button>
                       <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                        Cancel
+                        取消
                       </Button>
                     </div>
                   </form>
@@ -245,21 +245,21 @@ export default function PassengerManagement() {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="text-center py-8">Loading...</div>
+              <div className="text-center py-8">載入中...</div>
             ) : passengers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No passengers found. Add your first passenger to get started.
+                尚無乘客資料，請新增第一位乘客。
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>姓名</TableHead>
+                    <TableHead>電話</TableHead>
+                    <TableHead>電子郵件</TableHead>
+                    <TableHead>部門</TableHead>
+                    <TableHead>狀態</TableHead>
+                    <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -269,7 +269,7 @@ export default function PassengerManagement() {
                       <TableCell>{passenger.phone}</TableCell>
                       <TableCell>{passenger.email || '-'}</TableCell>
                       <TableCell>{passenger.department || '-'}</TableCell>
-                      <TableCell>{passenger.is_active ? 'Active' : 'Inactive'}</TableCell>
+                      <TableCell>{passenger.is_active ? '啟用' : '停用'}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button
