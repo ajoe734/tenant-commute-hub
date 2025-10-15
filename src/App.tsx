@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import BookingList from "./pages/BookingList";
 import NewBooking from "./pages/NewBooking";
+import PassengerManagement from "./pages/PassengerManagement";
 import DashboardLayout from "./components/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -59,7 +60,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <Dashboard />
+                    <PassengerManagement />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
