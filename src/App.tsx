@@ -15,6 +15,8 @@ import ReportManagement from "./pages/ReportManagement";
 import ApiKeyManagement from "./pages/ApiKeyManagement";
 import BillingManagement from "./pages/BillingManagement";
 import NotificationSettings from "./pages/NotificationSettings";
+import AdminPanel from "./pages/AdminPanel";
+import AuditLog from "./pages/AuditLog";
 import DashboardLayout from "./components/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -125,7 +127,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <Dashboard />
+                    <AdminPanel />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
@@ -135,7 +137,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <Dashboard />
+                    <AuditLog />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
