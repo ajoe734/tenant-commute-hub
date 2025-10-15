@@ -21,8 +21,8 @@ const NewBooking = () => {
   const [step, setStep] = useState(1);
 
   const handleSubmit = () => {
-    toast.success("Booking created successfully!", {
-      description: "Your trip has been scheduled. Booking ID: BK-2024-0848"
+    toast.success("預約建立成功！", {
+      description: "您的行程已排定。預約編號：BK-2024-0848"
     });
     setTimeout(() => navigate("/bookings"), 1500);
   };
@@ -33,25 +33,25 @@ const NewBooking = () => {
         return (
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label>Trip Type</Label>
+              <Label>行程類型</Label>
               <RadioGroup value={tripType} onValueChange={setTripType}>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="one-way" id="one-way" />
-                  <Label htmlFor="one-way" className="font-normal cursor-pointer">One-way trip</Label>
+                  <Label htmlFor="one-way" className="font-normal cursor-pointer">單程</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="round-trip" id="round-trip" />
-                  <Label htmlFor="round-trip" className="font-normal cursor-pointer">Round trip</Label>
+                  <Label htmlFor="round-trip" className="font-normal cursor-pointer">來回</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="recurring" id="recurring" />
-                  <Label htmlFor="recurring" className="font-normal cursor-pointer">Recurring schedule</Label>
+                  <Label htmlFor="recurring" className="font-normal cursor-pointer">週期性排程</Label>
                 </div>
               </RadioGroup>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="date">Pickup Date</Label>
+              <Label htmlFor="date">上車日期</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -62,7 +62,7 @@ const NewBooking = () => {
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP") : <span>Pick a date</span>}
+                    {date ? format(date, "PPP") : <span>選擇日期</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -78,12 +78,12 @@ const NewBooking = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="pickup-time">Pickup Time</Label>
+                <Label htmlFor="pickup-time">上車時間</Label>
                 <Input id="pickup-time" type="time" defaultValue="14:30" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="duration">Duration (est.)</Label>
-                <Input id="duration" placeholder="30 min" />
+                <Label htmlFor="duration">預估時長</Label>
+                <Input id="duration" placeholder="30 分鐘" />
               </div>
             </div>
           </div>
@@ -93,39 +93,39 @@ const NewBooking = () => {
         return (
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="pickup">Pickup Location</Label>
+              <Label htmlFor="pickup">上車地點</Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="pickup"
-                  placeholder="Enter address or select from favorites"
+                  placeholder="輸入地址或從常用地點選擇"
                   className="pl-10"
-                  defaultValue="Office HQ, 123 Business St."
+                  defaultValue="總部辦公室，商業街123號"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="dropoff">Drop-off Location</Label>
+              <Label htmlFor="dropoff">下車地點</Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="dropoff"
-                  placeholder="Enter destination address"
+                  placeholder="輸入目的地地址"
                   className="pl-10"
-                  defaultValue="Airport Terminal 3"
+                  defaultValue="機場第三航廈"
                 />
               </div>
             </div>
 
             <div className="p-4 rounded-lg border border-border bg-muted/30">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Estimated Distance</span>
-                <span className="font-medium">42 km</span>
+                <span className="text-muted-foreground">預估距離</span>
+                <span className="font-medium">42 公里</span>
               </div>
               <div className="flex items-center justify-between text-sm mt-2">
-                <span className="text-muted-foreground">Estimated Duration</span>
-                <span className="font-medium">35-45 min</span>
+                <span className="text-muted-foreground">預估時長</span>
+                <span className="font-medium">35-45 分鐘</span>
               </div>
             </div>
           </div>
@@ -135,55 +135,55 @@ const NewBooking = () => {
         return (
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="passenger">Passenger</Label>
+              <Label htmlFor="passenger">乘客</Label>
               <Select defaultValue="john-chen">
                 <SelectTrigger id="passenger">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="john-chen">John Chen - Sales Dept.</SelectItem>
-                  <SelectItem value="sarah-lin">Sarah Lin - Marketing</SelectItem>
-                  <SelectItem value="michael-wang">Michael Wang - Engineering</SelectItem>
-                  <SelectItem value="new">+ Add new passenger</SelectItem>
+                  <SelectItem value="john-chen">陳小明 - 業務部</SelectItem>
+                  <SelectItem value="sarah-lin">林小華 - 行銷部</SelectItem>
+                  <SelectItem value="michael-wang">王大維 - 工程部</SelectItem>
+                  <SelectItem value="new">+ 新增乘客</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="vehicle">Vehicle Type</Label>
+              <Label htmlFor="vehicle">車型</Label>
               <Select defaultValue="sedan">
                 <SelectTrigger id="vehicle">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sedan">Sedan (4 seats) - Standard</SelectItem>
-                  <SelectItem value="suv">SUV (6 seats) - Premium</SelectItem>
-                  <SelectItem value="van">Van (8 seats) - Group</SelectItem>
-                  <SelectItem value="luxury">Luxury Sedan - Executive</SelectItem>
+                  <SelectItem value="sedan">轎車 (4人座) - 標準</SelectItem>
+                  <SelectItem value="suv">休旅車 (6人座) - 高級</SelectItem>
+                  <SelectItem value="van">廂型車 (8人座) - 團體</SelectItem>
+                  <SelectItem value="luxury">豪華轎車 - 主管級</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cost-center">Cost Center</Label>
+              <Label htmlFor="cost-center">成本中心</Label>
               <Select defaultValue="sales">
                 <SelectTrigger id="cost-center">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sales">Sales Department</SelectItem>
-                  <SelectItem value="marketing">Marketing</SelectItem>
-                  <SelectItem value="engineering">Engineering</SelectItem>
-                  <SelectItem value="general">General & Admin</SelectItem>
+                  <SelectItem value="sales">業務部</SelectItem>
+                  <SelectItem value="marketing">行銷部</SelectItem>
+                  <SelectItem value="engineering">工程部</SelectItem>
+                  <SelectItem value="general">總務行政</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="notes">Special Instructions (Optional)</Label>
+              <Label htmlFor="notes">特殊需求（選填）</Label>
               <Textarea
                 id="notes"
-                placeholder="Any special requests or notes for the driver..."
+                placeholder="任何特殊要求或給司機的備註..."
                 className="resize-none"
               />
             </div>
@@ -192,16 +192,16 @@ const NewBooking = () => {
               <CardContent className="pt-6">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Base Fare</span>
+                    <span className="text-sm text-muted-foreground">基本費用</span>
                     <span className="font-medium">$65</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Distance Charge</span>
+                    <span className="text-sm text-muted-foreground">里程費用</span>
                     <span className="font-medium">$20</span>
                   </div>
                   <div className="h-px bg-border my-2" />
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold">Estimated Total</span>
+                    <span className="font-semibold">預估總額</span>
                     <span className="text-xl font-bold text-primary">$85</span>
                   </div>
                 </div>
@@ -231,8 +231,8 @@ const NewBooking = () => {
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
       <div>
-        <h2 className="text-2xl font-bold text-foreground">Create New Booking</h2>
-        <p className="text-muted-foreground">Schedule a new trip for your organization</p>
+        <h2 className="text-2xl font-bold text-foreground">建立新預約</h2>
+        <p className="text-muted-foreground">為您的組織安排新行程</p>
       </div>
 
       <div className="flex justify-between mb-8">
@@ -252,7 +252,7 @@ const NewBooking = () => {
                   <Icon className="h-5 w-5" />
                 </div>
                 <span className={cn("text-xs mt-2", step >= s ? "text-foreground font-medium" : "text-muted-foreground")}>
-                  {s === 1 ? "Basic Info" : s === 2 ? "Route" : "Details"}
+                  {s === 1 ? "基本資訊" : s === 2 ? "路線" : "詳細資料"}
                 </span>
               </div>
               {s < 3 && (
@@ -266,14 +266,14 @@ const NewBooking = () => {
       <Card>
         <CardHeader>
           <CardTitle>
-            Step {step} of 3: {step === 1 ? "Basic Information" : step === 2 ? "Route Details" : "Passenger & Pricing"}
+            步驟 {step} / 3：{step === 1 ? "基本資訊" : step === 2 ? "路線詳情" : "乘客與費用"}
           </CardTitle>
           <CardDescription>
             {step === 1
-              ? "Select trip type and pickup time"
+              ? "選擇行程類型和上車時間"
               : step === 2
-              ? "Enter pickup and drop-off locations"
-              : "Choose passenger, vehicle, and review cost"}
+              ? "輸入上車和下車地點"
+              : "選擇乘客、車型並確認費用"}
           </CardDescription>
         </CardHeader>
         <CardContent>{renderStep()}</CardContent>
@@ -284,16 +284,16 @@ const NewBooking = () => {
           variant="outline"
           onClick={() => step > 1 ? setStep(step - 1) : navigate("/bookings")}
         >
-          {step === 1 ? "Cancel" : "Previous"}
+          {step === 1 ? "取消" : "上一步"}
         </Button>
         {step < 3 ? (
           <Button onClick={() => setStep(step + 1)} className="bg-gradient-primary">
-            Next
+            下一步
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         ) : (
           <Button onClick={handleSubmit} className="bg-gradient-primary shadow-md hover:shadow-lg">
-            Create Booking
+            建立預約
           </Button>
         )}
       </div>

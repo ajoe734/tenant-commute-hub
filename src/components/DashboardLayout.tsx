@@ -19,15 +19,15 @@ interface DashboardLayoutProps {
 }
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Bookings", href: "/bookings", icon: Calendar },
-  { name: "Passengers", href: "/passengers", icon: Users },
-  { name: "Reports", href: "/reports", icon: FileText },
-  { name: "API & Webhooks", href: "/api-keys", icon: Key },
-  { name: "Billing", href: "/billing", icon: CreditCard },
-  { name: "Notifications", href: "/notifications", icon: Bell },
-  { name: "Admin", href: "/admin", icon: Shield },
-  { name: "Audit Trail", href: "/audit", icon: ClipboardList },
+  { name: "儀表板", href: "/dashboard", icon: LayoutDashboard },
+  { name: "預約管理", href: "/bookings", icon: Calendar },
+  { name: "乘客管理", href: "/passengers", icon: Users },
+  { name: "報表下載", href: "/reports", icon: FileText },
+  { name: "API & Webhook", href: "/api-keys", icon: Key },
+  { name: "付款發票", href: "/billing", icon: CreditCard },
+  { name: "通知設定", href: "/notifications", icon: Bell },
+  { name: "管理員", href: "/admin", icon: Shield },
+  { name: "審計軌跡", href: "/audit", icon: ClipboardList },
 ];
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
@@ -41,8 +41,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <Building2 className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="font-semibold text-foreground">Tenant Portal</h2>
-            <p className="text-xs text-muted-foreground">Enterprise Edition</p>
+            <h2 className="font-semibold text-foreground">租戶入口</h2>
+            <p className="text-xs text-muted-foreground">企業版</p>
           </div>
         </div>
 
@@ -72,7 +72,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-6">
           <div className="flex flex-1 items-center justify-between">
             <h1 className="text-xl font-semibold text-foreground">
-              {navigation.find(item => item.href === location.pathname)?.name || "Dashboard"}
+              {navigation.find(item => item.href === location.pathname)?.name || "儀表板"}
             </h1>
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">admin@company.com</span>

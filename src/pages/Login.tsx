@@ -36,19 +36,19 @@ const Login = () => {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-primary rounded-2xl shadow-glow mb-4">
             <Building2 className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">Tenant Portal</h1>
-          <p className="text-muted-foreground">Enterprise booking management</p>
+          <h1 className="text-3xl font-bold text-foreground">租戶入口</h1>
+          <p className="text-muted-foreground">企業預約管理系統</p>
         </div>
 
         <Card className="shadow-lg border-border/50 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle>Sign In</CardTitle>
-            <CardDescription>Enter your credentials to access your tenant dashboard</CardDescription>
+            <CardTitle>登入</CardTitle>
+            <CardDescription>輸入您的登入資訊以存取租戶儀表板</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">電子郵件</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -64,7 +64,7 @@ const Login = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">密碼</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -80,7 +80,7 @@ const Login = () => {
               </div>
 
               <Button type="submit" className="w-full bg-gradient-primary shadow-md hover:shadow-lg transition-all" disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign In"}
+                {isLoading ? "登入中..." : "登入"}
               </Button>
 
               <div className="relative">
@@ -88,13 +88,13 @@ const Login = () => {
                   <span className="w-full border-t border-border" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+                  <span className="bg-card px-2 text-muted-foreground">或使用以下方式繼續</span>
                 </div>
               </div>
 
               <Button type="button" variant="outline" className="w-full" onClick={handleSSO}>
                 <Building2 className="mr-2 h-4 w-4" />
-                SSO Login
+                SSO 登入
               </Button>
             </form>
           </CardContent>
