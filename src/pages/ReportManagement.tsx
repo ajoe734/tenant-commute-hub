@@ -64,28 +64,58 @@ const ReportManagement = () => {
 
     toast({
       title: "產生報表中",
-      description: "報表正在背景產生，完成後將顯示在列表中",
+      description: "報表正在背景產生，請稍候...",
     });
 
-    const { error } = await supabase.from("reports").insert([
-      {
-        tenant_id: profile.tenant_id,
-        name: `${getReportTypeLabel(type)} - ${format(new Date(), "yyyy-MM-dd")}`,
-        report_type: type,
-        format: "pdf" as const,
-        created_by: profile.id,
-      },
-    ]);
+    try {
+      // Create report record
+      const { data: newReport, error: insertError } = await supabase
+        .from("reports")
+        .insert([
+          {
+            tenant_id: profile.tenant_id,
+            name: `${getReportTypeLabel(type)} - ${format(new Date(), "yyyy-MM-dd")}`,
+            report_type: type,
+            format: "csv" as const,
+            created_by: profile.id,
+          },
+        ])
+        .select()
+        .single();
 
-    if (error) {
+      if (insertError || !newReport) {
+        throw insertError || new Error("Failed to create report");
+      }
+
+      // Trigger report generation edge function
+      const { error: functionError } = await supabase.functions.invoke(
+        "generate-report",
+        {
+          body: { report_id: newReport.id },
+        }
+      );
+
+      if (functionError) {
+        console.error("Report generation error:", functionError);
+        toast({
+          title: "產生失敗",
+          description: functionError.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({ 
+          title: "報表已產生",
+          description: "報表產生完成，可在列表中下載"
+        });
+        fetchReports();
+      }
+    } catch (error: any) {
+      console.error("Error generating report:", error);
       toast({
         title: "產生失敗",
-        description: error.message,
+        description: error.message || "發生未知錯誤",
         variant: "destructive",
       });
-    } else {
-      toast({ title: "報表已排程產生" });
-      fetchReports();
     }
   };
 
