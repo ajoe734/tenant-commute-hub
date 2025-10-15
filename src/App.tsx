@@ -17,6 +17,7 @@ import BillingManagement from "./pages/BillingManagement";
 import NotificationSettings from "./pages/NotificationSettings";
 import AdminPanel from "./pages/AdminPanel";
 import AuditLog from "./pages/AuditLog";
+import AddressManagement from "./pages/AddressManagement";
 import DashboardLayout from "./components/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -138,6 +139,16 @@ const App = () => (
                 <ProtectedRoute>
                   <DashboardLayout>
                     <AuditLog />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/addresses"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <AddressManagement />
                   </DashboardLayout>
                 </ProtectedRoute>
               }

@@ -12,7 +12,8 @@ import {
   Shield,
   ClipboardList,
   Building2,
-  LogOut
+  LogOut,
+  MapPin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +26,7 @@ const navigation = [
   { name: "儀表板", href: "/dashboard", icon: LayoutDashboard },
   { name: "預約管理", href: "/bookings", icon: Calendar },
   { name: "乘客管理", href: "/passengers", icon: Users },
+  { name: "地址簿", href: "/addresses", icon: MapPin },
   { name: "成本中心", href: "/cost-centers", icon: Building2 },
   { name: "報表下載", href: "/reports", icon: FileText },
   { name: "API & Webhook", href: "/api-keys", icon: Key },
