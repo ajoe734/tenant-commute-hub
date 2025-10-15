@@ -167,21 +167,23 @@ export default function PassengerManagement() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto py-8">
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>乘客管理</CardTitle>
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingPassenger(null);
-                    setFormData({ name: '', phone: '', email: '', department: '', notes: '' });
-                  }}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    新增乘客
-                  </Button>
-                </DialogTrigger>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              管理公司內部的乘客資料
+            </p>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => {
+                setEditingPassenger(null);
+                setFormData({ name: '', phone: '', email: '', department: '', notes: '' });
+              }}>
+                <Plus className="mr-2 h-4 w-4" />
+                新增乘客
+              </Button>
+            </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>
@@ -239,11 +241,12 @@ export default function PassengerManagement() {
                       </Button>
                     </div>
                   </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <Card>
+          <CardContent className="p-6">
             {loading ? (
               <div className="text-center py-8">載入中...</div>
             ) : passengers.length === 0 ? (
