@@ -193,13 +193,14 @@ export default function PassengerManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              管理公司內部的乘客資料
-            </p>
-          </div>
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold">乘客管理</h1>
+              <p className="text-sm text-muted-foreground mt-2">
+                管理公司內部的乘客資料
+              </p>
+            </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => {
