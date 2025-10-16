@@ -69,7 +69,7 @@ export default function AdminPanel() {
       setUsers(usersWithRoles);
     } catch (error: any) {
       console.error('Error fetching users:', error);
-      toast.error('Failed to load users');
+      toast.error('載入使用者失敗');
     } finally {
       setLoading(false);
     }
@@ -89,11 +89,11 @@ export default function AdminPanel() {
 
       if (error) throw error;
 
-      toast.success(`Role ${role} added successfully`);
+      toast.success(`角色 ${role} 已成功新增`);
       await fetchUsers();
     } catch (error: any) {
       console.error('Error adding role:', error);
-      toast.error(error.message || 'Failed to add role');
+      toast.error(error.message || '新增角色失敗');
     } finally {
       setActionLoading(null);
     }
@@ -112,11 +112,11 @@ export default function AdminPanel() {
 
       if (error) throw error;
 
-      toast.success(`Role ${role} removed successfully`);
+      toast.success(`角色 ${role} 已成功移除`);
       await fetchUsers();
     } catch (error: any) {
       console.error('Error removing role:', error);
-      toast.error(error.message || 'Failed to remove role');
+      toast.error(error.message || '移除角色失敗');
     } finally {
       setActionLoading(null);
     }
@@ -135,7 +135,7 @@ export default function AdminPanel() {
       <div className="flex items-center justify-center min-h-screen">
         <Card>
           <CardContent className="pt-6">
-            <p className="text-muted-foreground">You don't have permission to access this page.</p>
+            <p className="text-muted-foreground">您沒有權限存取此頁面</p>
           </CardContent>
         </Card>
       </div>
@@ -149,25 +149,25 @@ export default function AdminPanel() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <Shield className="h-8 w-8" />
-          Admin Panel
+          管理面板
         </h1>
         <p className="text-muted-foreground mt-2">
-          Manage user roles and permissions
+          管理使用者角色與權限
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Users & Roles</CardTitle>
+          <CardTitle>使用者與角色</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Current Roles</TableHead>
-                <TableHead>Add Role</TableHead>
+                <TableHead>使用者</TableHead>
+                <TableHead>電子郵件</TableHead>
+                <TableHead>目前角色</TableHead>
+                <TableHead>新增角色</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -178,7 +178,7 @@ export default function AdminPanel() {
                   <TableCell>
                     <div className="flex gap-2 flex-wrap">
                       {user.roles.length === 0 ? (
-                        <Badge variant="outline">No roles</Badge>
+                        <Badge variant="outline">無角色</Badge>
                       ) : (
                         user.roles.map(role => (
                           <Badge key={role} variant="secondary" className="flex items-center gap-1">
@@ -205,7 +205,7 @@ export default function AdminPanel() {
                       disabled={actionLoading?.startsWith(user.id)}
                     >
                       <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select role" />
+                        <SelectValue placeholder="選擇角色" />
                       </SelectTrigger>
                       <SelectContent>
                         {availableRoles

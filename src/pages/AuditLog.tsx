@@ -102,7 +102,7 @@ export default function AuditLog() {
       setLogs(logsWithEmails);
     } catch (error: any) {
       console.error('Error fetching audit logs:', error);
-      toast.error('Failed to load audit logs');
+      toast.error('載入稽核記錄失敗');
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,7 @@ export default function AuditLog() {
       <div className="flex items-center justify-center min-h-screen">
         <Card>
           <CardContent className="pt-6">
-            <p className="text-muted-foreground">You don't have permission to access this page.</p>
+            <p className="text-muted-foreground">您沒有權限存取此頁面</p>
           </CardContent>
         </Card>
       </div>
@@ -148,10 +148,10 @@ export default function AuditLog() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <FileText className="h-8 w-8" />
-          Audit Trail
+          稽核記錄
         </h1>
         <p className="text-muted-foreground mt-2">
-          View all system activity and changes
+          查看所有系統活動與變更
         </p>
       </div>
 
@@ -159,34 +159,34 @@ export default function AuditLog() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Filter className="h-5 w-5" />
-            Filters
+            篩選條件
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
-              <Label>Action</Label>
+              <Label>操作類型</Label>
               <Select value={filterAction} onValueChange={setFilterAction}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Actions</SelectItem>
-                  <SelectItem value="INSERT">Insert</SelectItem>
-                  <SelectItem value="UPDATE">Update</SelectItem>
-                  <SelectItem value="DELETE">Delete</SelectItem>
+                  <SelectItem value="all">所有操作</SelectItem>
+                  <SelectItem value="INSERT">新增</SelectItem>
+                  <SelectItem value="UPDATE">更新</SelectItem>
+                  <SelectItem value="DELETE">刪除</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label>Table</Label>
+              <Label>資料表</Label>
               <Select value={filterTable} onValueChange={setFilterTable}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Tables</SelectItem>
+                  <SelectItem value="all">所有資料表</SelectItem>
                   {uniqueTables.map(table => (
                     <SelectItem key={table} value={table}>
                       {table}
@@ -197,7 +197,7 @@ export default function AuditLog() {
             </div>
 
             <div>
-              <Label>Start Date</Label>
+              <Label>開始日期</Label>
               <Input
                 type="date"
                 value={startDate}
@@ -206,7 +206,7 @@ export default function AuditLog() {
             </div>
 
             <div>
-              <Label>End Date</Label>
+              <Label>結束日期</Label>
               <Input
                 type="date"
                 value={endDate}
@@ -216,7 +216,7 @@ export default function AuditLog() {
 
             <div className="flex items-end">
               <Button onClick={fetchLogs} className="w-full">
-                Apply Filters
+                套用篩選
               </Button>
             </div>
           </div>
@@ -225,26 +225,26 @@ export default function AuditLog() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Audit Logs</CardTitle>
+          <CardTitle>稽核記錄</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Timestamp</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Table</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Record ID</TableHead>
-                  <TableHead>IP Address</TableHead>
+                  <TableHead>時間戳記</TableHead>
+                  <TableHead>使用者</TableHead>
+                  <TableHead>資料表</TableHead>
+                  <TableHead>操作</TableHead>
+                  <TableHead>記錄 ID</TableHead>
+                  <TableHead>IP 位址</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {logs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      No audit logs found
+                      查無稽核記錄
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -253,13 +253,13 @@ export default function AuditLog() {
                       <TableCell className="whitespace-nowrap">
                         {format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss')}
                       </TableCell>
-                      <TableCell>{log.user_email || 'Unknown'}</TableCell>
+                      <TableCell>{log.user_email || '未知'}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{log.table_name}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant={getActionBadgeVariant(log.action)}>
-                          {log.action}
+                          {log.action === 'INSERT' ? '新增' : log.action === 'UPDATE' ? '更新' : log.action === 'DELETE' ? '刪除' : log.action}
                         </Badge>
                       </TableCell>
                       <TableCell className="font-mono text-xs">
