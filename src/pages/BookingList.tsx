@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Plus } from 'lucide-react';
+import { Plus, Database } from 'lucide-react';
 
 type BookingStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
@@ -29,6 +29,7 @@ export default function BookingList() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [generatingDemo, setGeneratingDemo] = useState(false);
 
   useEffect(() => {
     fetchBookings();
@@ -85,6 +86,13 @@ export default function BookingList() {
   };
 
   const getStatusBadge = (status: BookingStatus) => {
+    const statusLabels: Record<BookingStatus, string> = {
+      scheduled: '已排程',
+      in_progress: '進行中',
+      completed: '已完成',
+      cancelled: '已取消',
+    };
+
     const variants: Record<BookingStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
       scheduled: 'default',
       in_progress: 'secondary',
@@ -92,10 +100,12 @@ export default function BookingList() {
       cancelled: 'destructive',
     };
 
-    return <Badge variant={variants[status]}>{status.replace('_', ' ').toUpperCase()}</Badge>;
+    return <Badge variant={variants[status]}>{statusLabels[status]}</Badge>;
   };
 
   const handleCancelBooking = async (bookingId: string) => {
+    if (!confirm('確定要取消此預約嗎？')) return;
+
     try {
       const { error } = await supabase
         .from('bookings')
@@ -105,16 +115,41 @@ export default function BookingList() {
       if (error) throw error;
 
       toast({
-        title: 'Success',
-        description: 'Booking cancelled successfully',
+        title: '成功',
+        description: '預約已取消',
       });
     } catch (error: any) {
       console.error('Error cancelling booking:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to cancel booking',
+        title: '錯誤',
+        description: '取消預約失敗',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleGenerateDemoData = async () => {
+    setGeneratingDemo(true);
+    try {
+      const { error } = await supabase.functions.invoke('seed-demo-data');
+
+      if (error) throw error;
+
+      toast({
+        title: '成功',
+        description: 'Demo 資料已建立',
+      });
+
+      fetchBookings();
+    } catch (error: any) {
+      console.error('Error generating demo data:', error);
+      toast({
+        title: '錯誤',
+        description: error.message || '建立 Demo 資料失敗',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingDemo(false);
     }
   };
 
@@ -123,10 +158,10 @@ export default function BookingList() {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle>Bookings</CardTitle>
+            <CardTitle>預約管理</CardTitle>
             <Button onClick={() => navigate('/bookings/new')}>
               <Plus className="mr-2 h-4 w-4" />
-              New Booking
+              新增預約
             </Button>
           </div>
         </CardHeader>
@@ -134,49 +169,68 @@ export default function BookingList() {
           <div className="mb-4">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Filter by status" />
+                <SelectValue placeholder="依狀態篩選" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="scheduled">Scheduled</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="all">全部狀態</SelectItem>
+                <SelectItem value="scheduled">已排程</SelectItem>
+                <SelectItem value="in_progress">進行中</SelectItem>
+                <SelectItem value="completed">已完成</SelectItem>
+                <SelectItem value="cancelled">已取消</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {loading ? (
-            <div className="text-center py-8">Loading...</div>
+            <div className="text-center py-8 text-muted-foreground">載入中...</div>
           ) : bookings.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No bookings found. Create your first booking to get started.
+            <div className="text-center py-12">
+              <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-4">
+                尚無預約記錄
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => navigate('/bookings/new')}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  建立第一筆預約
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={handleGenerateDemoData}
+                  disabled={generatingDemo}
+                >
+                  <Database className="mr-2 h-4 w-4" />
+                  {generatingDemo ? '產生中...' : '產生 Demo 資料'}
+                </Button>
+              </div>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Booking #</TableHead>
-                  <TableHead>Passenger</TableHead>
-                  <TableHead>Pickup</TableHead>
-                  <TableHead>Dropoff</TableHead>
-                  <TableHead>Scheduled Time</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>預約編號</TableHead>
+                  <TableHead>乘客</TableHead>
+                  <TableHead>上車地點</TableHead>
+                  <TableHead>下車地點</TableHead>
+                  <TableHead>預約時間</TableHead>
+                  <TableHead>趟次類型</TableHead>
+                  <TableHead>狀態</TableHead>
+                  <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {bookings.map((booking) => (
                   <TableRow key={booking.id}>
-                    <TableCell>{booking.booking_number}</TableCell>
+                    <TableCell className="font-mono">{booking.booking_number}</TableCell>
                     <TableCell>{booking.passengers?.name}</TableCell>
-                    <TableCell>{booking.pickup_address}</TableCell>
-                    <TableCell>{booking.dropoff_address}</TableCell>
+                    <TableCell className="max-w-xs truncate">{booking.pickup_address}</TableCell>
+                    <TableCell className="max-w-xs truncate">{booking.dropoff_address}</TableCell>
                     <TableCell>
-                      {new Date(booking.scheduled_time).toLocaleString()}
+                      {new Date(booking.scheduled_time).toLocaleString('zh-TW')}
                     </TableCell>
-                    <TableCell>{booking.trip_type.replace('_', ' ')}</TableCell>
+                    <TableCell>
+                      {booking.trip_type === 'one_way' ? '單程' : '來回'}
+                    </TableCell>
                     <TableCell>{getStatusBadge(booking.status)}</TableCell>
                     <TableCell>
                       {booking.status === 'scheduled' && (
@@ -185,7 +239,7 @@ export default function BookingList() {
                           size="sm"
                           onClick={() => handleCancelBooking(booking.id)}
                         >
-                          Cancel
+                          取消
                         </Button>
                       )}
                     </TableCell>

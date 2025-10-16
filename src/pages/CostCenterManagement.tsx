@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Pencil, Trash2, Building2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Building2, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -43,6 +43,7 @@ const CostCenterManagement = () => {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [generatingDemo, setGeneratingDemo] = useState(false);
   const [formData, setFormData] = useState({
     code: "",
     name: "",
@@ -164,6 +165,31 @@ const CostCenterManagement = () => {
     setIsDialogOpen(false);
   };
 
+  const handleGenerateDemoData = async () => {
+    setGeneratingDemo(true);
+    try {
+      const { error } = await supabase.functions.invoke('seed-demo-data');
+
+      if (error) throw error;
+
+      toast({
+        title: '成功',
+        description: 'Demo 資料已建立',
+      });
+
+      fetchCostCenters();
+    } catch (error: any) {
+      console.error('Error generating demo data:', error);
+      toast({
+        title: '錯誤',
+        description: error.message || '建立 Demo 資料失敗',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingDemo(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -247,8 +273,19 @@ const CostCenterManagement = () => {
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">載入中...</div>
           ) : costCenters.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              尚無成本中心，點擊「新增成本中心」開始建立
+            <div className="text-center py-12">
+              <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-4">
+                尚無成本中心
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={handleGenerateDemoData}
+                disabled={generatingDemo}
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {generatingDemo ? '產生中...' : '產生 Demo 資料'}
+              </Button>
             </div>
           ) : (
             <Table>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CreditCard, Download, DollarSign, Calendar, TrendingUp } from "lucide-react";
+import { CreditCard, Download, DollarSign, Calendar, TrendingUp, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +33,7 @@ const BillingManagement = () => {
   const { toast } = useToast();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generatingDemo, setGeneratingDemo] = useState(false);
   const [stats, setStats] = useState({
     currentMonth: 0,
     lastMonth: 0,
@@ -109,6 +110,31 @@ const BillingManagement = () => {
     window.open(url, "_blank");
   };
 
+  const handleGenerateDemoData = async () => {
+    setGeneratingDemo(true);
+    try {
+      const { error } = await supabase.functions.invoke('seed-demo-data');
+
+      if (error) throw error;
+
+      toast({
+        title: '成功',
+        description: 'Demo 資料已建立',
+      });
+
+      fetchInvoices();
+    } catch (error: any) {
+      console.error('Error generating demo data:', error);
+      toast({
+        title: '錯誤',
+        description: error.message || '建立 Demo 資料失敗',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingDemo(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -178,8 +204,19 @@ const BillingManagement = () => {
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">載入中...</div>
           ) : invoices.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              尚無發票記錄
+            <div className="text-center py-12">
+              <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-4">
+                尚無發票記錄
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={handleGenerateDemoData}
+                disabled={generatingDemo}
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {generatingDemo ? '產生中...' : '產生 Demo 資料'}
+              </Button>
             </div>
           ) : (
             <Table>

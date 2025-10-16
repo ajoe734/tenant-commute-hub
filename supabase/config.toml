@@ -2,3 +2,6 @@ project_id = "vwtkochgbvvipikmwaxs"
 
 [functions.seed-test-user]
 verify_jwt = false
+
+[functions.seed-demo-data]
+verify_jwt = true

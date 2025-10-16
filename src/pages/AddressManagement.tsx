@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { MapPin, Plus, Pencil, Trash2, Tag, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -45,6 +45,7 @@ const AddressManagement = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
+  const [generatingDemo, setGeneratingDemo] = useState(false);
   
   const [formData, setFormData] = useState<{
     name: string;
@@ -213,6 +214,31 @@ const AddressManagement = () => {
     });
   };
 
+  const handleGenerateDemoData = async () => {
+    setGeneratingDemo(true);
+    try {
+      const { error } = await supabase.functions.invoke('seed-demo-data');
+
+      if (error) throw error;
+
+      toast({
+        title: '成功',
+        description: 'Demo 資料已建立',
+      });
+
+      fetchAddresses();
+    } catch (error: any) {
+      console.error('Error generating demo data:', error);
+      toast({
+        title: '錯誤',
+        description: error.message || '建立 Demo 資料失敗',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingDemo(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -238,8 +264,19 @@ const AddressManagement = () => {
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">載入中...</div>
           ) : addresses.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              尚無地址記錄，點擊「新增地址」按鈕開始建立
+            <div className="text-center py-12">
+              <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-4">
+                尚無地址記錄
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={handleGenerateDemoData}
+                disabled={generatingDemo}
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {generatingDemo ? '產生中...' : '產生 Demo 資料'}
+              </Button>
             </div>
           ) : (
             <Table>

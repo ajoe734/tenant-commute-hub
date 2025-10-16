@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Database } from 'lucide-react';
 
 interface Passenger {
   id: string;
@@ -30,6 +30,7 @@ export default function PassengerManagement() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPassenger, setEditingPassenger] = useState<Passenger | null>(null);
+  const [generatingDemo, setGeneratingDemo] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -149,6 +150,31 @@ export default function PassengerManagement() {
     }
   };
 
+  const handleGenerateDemoData = async () => {
+    setGeneratingDemo(true);
+    try {
+      const { error } = await supabase.functions.invoke('seed-demo-data');
+
+      if (error) throw error;
+
+      toast({
+        title: '成功',
+        description: 'Demo 資料已建立',
+      });
+
+      fetchPassengers();
+    } catch (error: any) {
+      console.error('Error generating demo data:', error);
+      toast({
+        title: '錯誤',
+        description: error.message || '建立 Demo 資料失敗',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingDemo(false);
+    }
+  };
+
   if (!canManagePassengers) {
     return (
       <DashboardLayout>
@@ -250,8 +276,19 @@ export default function PassengerManagement() {
             {loading ? (
               <div className="text-center py-8">載入中...</div>
             ) : passengers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                尚無乘客資料，請新增第一位乘客。
+              <div className="text-center py-12">
+                <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground mb-4">
+                  尚無乘客資料
+                </p>
+                <Button 
+                  variant="outline" 
+                  onClick={handleGenerateDemoData}
+                  disabled={generatingDemo}
+                >
+                  <Database className="mr-2 h-4 w-4" />
+                  {generatingDemo ? '產生中...' : '產生 Demo 資料'}
+                </Button>
               </div>
             ) : (
               <Table>
