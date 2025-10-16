@@ -9,6 +9,7 @@ import { Building2, Mail, Lock, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ const Login = () => {
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreatingTestUser, setIsCreatingTestUser] = useState(false);
   const { signIn, signUp, user } = useAuth();
 
   useEffect(() => {
@@ -55,6 +57,41 @@ const Login = () => {
     setIsLoading(false);
   };
 
+  const handleCreateTestUser = async () => {
+    setIsCreatingTestUser(true);
+    
+    try {
+      // Call edge function to create/seed test user
+      const { data, error } = await supabase.functions.invoke('seed-test-user');
+      
+      if (error) {
+        console.error('Error creating test user:', error);
+        toast.error('建立測試帳號失敗');
+        return;
+      }
+
+      if (data?.ok) {
+        toast.success('測試帳號已就緒，正在登入...');
+        
+        // Auto sign in with test credentials
+        const { error: signInError } = await signIn(data.email, data.password);
+        
+        if (signInError) {
+          toast.error('登入失敗：' + signInError.message);
+        } else {
+          toast.success('登入成功！');
+        }
+      } else {
+        toast.error('建立測試帳號失敗');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('發生錯誤');
+    } finally {
+      setIsCreatingTestUser(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-subtle p-4">
       <div className="w-full max-w-md space-y-8 animate-fade-in">
@@ -81,13 +118,9 @@ const Login = () => {
               <CardContent>
                 <Alert className="mb-4 border-primary/20 bg-primary/5">
                   <Info className="h-4 w-4" />
-                  <AlertTitle>測試帳號</AlertTitle>
-                  <AlertDescription className="text-sm space-y-1">
-                    <p><strong>信箱：</strong>test@example.com</p>
-                    <p><strong>密碼：</strong>test1234</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      ⚠️ 首次使用請先至「註冊」頁面建立此測試帳號
-                    </p>
+                  <AlertTitle>快速測試</AlertTitle>
+                  <AlertDescription className="text-sm">
+                    點擊下方按鈕即可建立並登入測試帳號，無需手動註冊
                   </AlertDescription>
                 </Alert>
                 <form onSubmit={handleSignIn} className="space-y-4">
@@ -127,6 +160,25 @@ const Login = () => {
                     {isLoading ? "登入中..." : "登入"}
                   </Button>
                 </form>
+
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">或</span>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleCreateTestUser}
+                  disabled={isCreatingTestUser}
+                >
+                  {isCreatingTestUser ? "建立中..." : "一鍵建立並登入測試帳號"}
+                </Button>
               </CardContent>
             </TabsContent>
 
