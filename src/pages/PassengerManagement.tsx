@@ -193,24 +193,26 @@ export default function PassengerManagement() {
 
   return (
     <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">乘客管理</h1>
-              <p className="text-sm text-muted-foreground mt-2">
-                管理公司內部的乘客資料
-              </p>
-            </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => {
-                setEditingPassenger(null);
-                setFormData({ name: '', phone: '', email: '', department: '', notes: '' });
-              }}>
-                <Plus className="mr-2 h-4 w-4" />
-                新增乘客
-              </Button>
-            </DialogTrigger>
+      <div className="container mx-auto py-8">
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>乘客管理</CardTitle>
+                <p className="text-sm text-muted-foreground mt-2">
+                  管理公司內部的乘客資料
+                </p>
+              </div>
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => {
+                    setEditingPassenger(null);
+                    setFormData({ name: '', phone: '', email: '', department: '', notes: '' });
+                  }}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    新增乘客
+                  </Button>
+                </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>
@@ -268,12 +270,11 @@ export default function PassengerManagement() {
                       </Button>
                     </div>
                   </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        <Card>
-          <CardContent className="p-6">
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardHeader>
+          <CardContent>
             {loading ? (
               <div className="text-center py-8">載入中...</div>
             ) : passengers.length === 0 ? (
