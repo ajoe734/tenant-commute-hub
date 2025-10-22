@@ -14,13 +14,17 @@ import { toast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, MapPin, Clock } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DollarSign, MapPin, Clock, User, Car, HelpCircle, Info } from 'lucide-react';
 import MapPicker from '@/components/MapPicker';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const bookingSchema = z.object({
   passenger_id: z.string().min(1, '請選擇乘客'),
   trip_type: z.enum(['one_way', 'round_trip']),
+  preferred_vehicle_type: z.enum(['human_driver', 'autonomous', 'no_preference']).default('no_preference'),
   pickup_address: z.string().min(1, '上車地址為必填'),
   pickup_address_id: z.string().optional(),
   pickup_latitude: z.number(),
@@ -79,6 +83,7 @@ export default function NewBooking() {
   const dropoffLat = form.watch('dropoff_latitude');
   const dropoffLng = form.watch('dropoff_longitude');
   const tripType = form.watch('trip_type');
+  const preferredVehicleType = form.watch('preferred_vehicle_type');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -129,6 +134,7 @@ export default function NewBooking() {
             dropoff_lat: dropoffLat,
             dropoff_lng: dropoffLng,
             trip_type: tripType,
+            preferred_vehicle_type: preferredVehicleType,
           },
         });
 
@@ -150,7 +156,7 @@ export default function NewBooking() {
 
     const debounce = setTimeout(calculatePrice, 500);
     return () => clearTimeout(debounce);
-  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, tripType]);
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, tripType, preferredVehicleType]);
 
   const handleSelectAddress = (type: 'pickup' | 'dropoff', address: Address) => {
     if (type === 'pickup') {
@@ -167,7 +173,26 @@ export default function NewBooking() {
   };
 
   const onSubmit = async (data: BookingFormData) => {
-    if (!user || !profile) return;
+    if (!user || !profile) {
+      toast({
+        title: '錯誤',
+        description: '請先登入',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Autonomous vehicle confirmation
+    if (data.preferred_vehicle_type === 'autonomous') {
+      const confirmed = window.confirm(
+        '您選擇了自駕車服務。\n\n' +
+        '請注意：若路線不適合自駕車（如山區、工地、特殊限制區域），' +
+        '系統可能改派人類司機，但仍會保留優惠折扣。\n\n' +
+        '確定要繼續預約嗎？'
+      );
+      
+      if (!confirmed) return;
+    }
 
     setIsSubmitting(true);
 
@@ -179,6 +204,7 @@ export default function NewBooking() {
         booking_number: bookingNumber,
         passenger_id: data.passenger_id,
         trip_type: data.trip_type,
+        preferred_vehicle_type: data.preferred_vehicle_type,
         pickup_address: data.pickup_address,
         pickup_address_id: data.pickup_address_id || null,
         pickup_latitude: data.pickup_latitude,
@@ -204,7 +230,7 @@ export default function NewBooking() {
 
       toast({
         title: '建立成功',
-        description: '預約已成功建立',
+        description: `預約已成功建立${data.preferred_vehicle_type === 'autonomous' ? '（已選擇自駕車優惠）' : ''}`,
       });
 
       navigate('/bookings');
@@ -278,6 +304,72 @@ export default function NewBooking() {
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="preferred_vehicle_type"
+                render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormLabel>偏好用車類型 *</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="flex flex-col space-y-2"
+                      >
+                        <div className="flex items-center space-x-3 border rounded-lg p-3 hover:bg-accent transition-colors">
+                          <RadioGroupItem value="human_driver" id="human_driver" />
+                          <Label htmlFor="human_driver" className="flex-1 cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              <span className="font-medium">人類司機</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              由專業司機服務，適合需要協助搬運或特殊需求
+                            </p>
+                          </Label>
+                        </div>
+                        
+                        <div className="flex items-center space-x-3 border rounded-lg p-3 hover:bg-accent transition-colors">
+                          <RadioGroupItem value="autonomous" id="autonomous" />
+                          <Label htmlFor="autonomous" className="flex-1 cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <Car className="h-4 w-4" />
+                              <span className="font-medium">自駕車</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              智能自動駕駛車輛，環保且可能享有折扣優惠
+                            </p>
+                          </Label>
+                        </div>
+                        
+                        <div className="flex items-center space-x-3 border rounded-lg p-3 hover:bg-accent transition-colors">
+                          <RadioGroupItem value="no_preference" id="no_preference" />
+                          <Label htmlFor="no_preference" className="flex-1 cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <HelpCircle className="h-4 w-4" />
+                              <span className="font-medium">無偏好</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              系統自動分配最佳車輛類型
+                            </p>
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                    
+                    {field.value === 'autonomous' && (
+                      <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900">
+                        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <AlertDescription className="text-blue-800 dark:text-blue-300">
+                          自駕車服務可享 <strong>9折優惠</strong>。若您的路線不適合自駕車（如特殊地形、施工路段），系統可能改派人類司機。
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </FormItem>
+                )}
+              />
 
               {/* Pickup Location */}
               <Card className="border-primary/20">

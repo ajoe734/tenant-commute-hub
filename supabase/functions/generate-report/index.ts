@@ -50,6 +50,9 @@ serve(async (req) => {
             status,
             estimated_cost,
             actual_cost,
+            preferred_vehicle_type,
+            actual_vehicle_type,
+            vehicle_type_notes,
             passengers(name, department)
           `)
           .eq('tenant_id', report.tenant_id)
@@ -58,9 +61,16 @@ serve(async (req) => {
           .order('scheduled_time', { ascending: false });
 
         reportData = { bookings };
-        csvContent = 'Booking Number,Scheduled Time,Status,Passenger,Department,Estimated Cost,Actual Cost\n';
+        csvContent = 'Booking Number,Scheduled Time,Status,Passenger,Department,Preferred Vehicle,Actual Vehicle,Vehicle Notes,Estimated Cost,Actual Cost\n';
         bookings?.forEach((b: any) => {
-          csvContent += `${b.booking_number},${b.scheduled_time},${b.status},${b.passengers?.name || ''},${b.passengers?.department || ''},${b.estimated_cost || ''},${b.actual_cost || ''}\n`;
+          const vehicleTypeLabels: Record<string, string> = {
+            human_driver: '人類司機',
+            autonomous: '自駕車',
+            no_preference: '無偏好',
+          };
+          const preferredVehicle = vehicleTypeLabels[b.preferred_vehicle_type] || '';
+          const actualVehicle = b.actual_vehicle_type ? (vehicleTypeLabels[b.actual_vehicle_type] || '') : '';
+          csvContent += `${b.booking_number},${b.scheduled_time},${b.status},${b.passengers?.name || ''},${b.passengers?.department || ''},${preferredVehicle},${actualVehicle},"${b.vehicle_type_notes || ''}",${b.estimated_cost || ''},${b.actual_cost || ''}\n`;
         });
         break;
 

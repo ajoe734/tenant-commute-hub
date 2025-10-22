@@ -60,7 +60,20 @@ serve(async (req) => {
         try {
           // Create signature (simple HMAC-like approach)
           const timestamp = Date.now();
-          const signaturePayload = `${timestamp}.${JSON.stringify(payload)}`;
+          
+          // Enrich payload with vehicle type information
+          const enrichedPayload = {
+            ...payload,
+            vehicleType: {
+              preferred: payload.preferred_vehicle_type || 'no_preference',
+              actual: payload.actual_vehicle_type || payload.preferred_vehicle_type || 'no_preference',
+              notes: payload.vehicle_type_notes || null,
+            },
+            source: 'booking_system',
+            timestamp: new Date().toISOString(),
+          };
+          
+          const signaturePayload = `${timestamp}.${JSON.stringify(enrichedPayload)}`;
           const encoder = new TextEncoder();
           const key = await crypto.subtle.importKey(
             'raw',
@@ -86,7 +99,7 @@ serve(async (req) => {
               'X-Webhook-Timestamp': timestamp.toString(),
               'X-Event-Type': event_type,
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(enrichedPayload),
           });
 
           responseStatus = response.status;

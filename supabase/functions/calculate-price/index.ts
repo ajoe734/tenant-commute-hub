@@ -11,6 +11,7 @@ interface PriceRequest {
   dropoff_lat: number;
   dropoff_lng: number;
   trip_type: 'one_way' | 'round_trip' | 'hourly';
+  preferred_vehicle_type?: 'human_driver' | 'autonomous' | 'no_preference';
 }
 
 serve(async (req) => {
@@ -19,7 +20,14 @@ serve(async (req) => {
   }
 
   try {
-    const { pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, trip_type } = await req.json() as PriceRequest;
+    const { 
+      pickup_lat, 
+      pickup_lng, 
+      dropoff_lat, 
+      dropoff_lng, 
+      trip_type,
+      preferred_vehicle_type
+    } = await req.json() as PriceRequest;
 
     console.log('Calculating price for trip:', { pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, trip_type });
 
@@ -46,6 +54,12 @@ serve(async (req) => {
       estimatedCost = estimatedCost * 1.8; // 1.8x for round trip (slight discount)
     } else if (trip_type === 'hourly') {
       estimatedCost = 500; // Flat hourly rate
+    }
+    
+    // Apply autonomous vehicle discount (10% off)
+    if (preferred_vehicle_type === 'autonomous') {
+      estimatedCost = estimatedCost * 0.9;
+      console.log('Applied autonomous vehicle discount (10% off)');
     }
     
     // Ensure minimum charge

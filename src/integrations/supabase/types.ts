@@ -122,7 +122,7 @@ export type Database = {
           action: string
           created_at: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           new_values: Json | null
           old_values: Json | null
           record_id: string
@@ -135,7 +135,7 @@ export type Database = {
           action: string
           created_at?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           new_values?: Json | null
           old_values?: Json | null
           record_id: string
@@ -148,7 +148,7 @@ export type Database = {
           action?: string
           created_at?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           new_values?: Json | null
           old_values?: Json | null
           record_id?: string
@@ -170,6 +170,9 @@ export type Database = {
       bookings: {
         Row: {
           actual_cost: number | null
+          actual_vehicle_type:
+            | Database["public"]["Enums"]["vehicle_type"]
+            | null
           booking_number: string
           cost_center_id: string | null
           created_at: string
@@ -189,6 +192,9 @@ export type Database = {
           pickup_address_id: string | null
           pickup_latitude: number
           pickup_longitude: number
+          preferred_vehicle_type:
+            | Database["public"]["Enums"]["vehicle_type"]
+            | null
           recurrence_end_date: string | null
           recurrence_frequency:
             | Database["public"]["Enums"]["recurrence_frequency"]
@@ -198,9 +204,13 @@ export type Database = {
           tenant_id: string
           trip_type: Database["public"]["Enums"]["trip_type"]
           updated_at: string
+          vehicle_type_notes: string | null
         }
         Insert: {
           actual_cost?: number | null
+          actual_vehicle_type?:
+            | Database["public"]["Enums"]["vehicle_type"]
+            | null
           booking_number: string
           cost_center_id?: string | null
           created_at?: string
@@ -220,6 +230,9 @@ export type Database = {
           pickup_address_id?: string | null
           pickup_latitude: number
           pickup_longitude: number
+          preferred_vehicle_type?:
+            | Database["public"]["Enums"]["vehicle_type"]
+            | null
           recurrence_end_date?: string | null
           recurrence_frequency?:
             | Database["public"]["Enums"]["recurrence_frequency"]
@@ -229,9 +242,13 @@ export type Database = {
           tenant_id: string
           trip_type: Database["public"]["Enums"]["trip_type"]
           updated_at?: string
+          vehicle_type_notes?: string | null
         }
         Update: {
           actual_cost?: number | null
+          actual_vehicle_type?:
+            | Database["public"]["Enums"]["vehicle_type"]
+            | null
           booking_number?: string
           cost_center_id?: string | null
           created_at?: string
@@ -251,6 +268,9 @@ export type Database = {
           pickup_address_id?: string | null
           pickup_latitude?: number
           pickup_longitude?: number
+          preferred_vehicle_type?:
+            | Database["public"]["Enums"]["vehicle_type"]
+            | null
           recurrence_end_date?: string | null
           recurrence_frequency?:
             | Database["public"]["Enums"]["recurrence_frequency"]
@@ -260,6 +280,7 @@ export type Database = {
           tenant_id?: string
           trip_type?: Database["public"]["Enums"]["trip_type"]
           updated_at?: string
+          vehicle_type_notes?: string | null
         }
         Relationships: [
           {
@@ -759,10 +780,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_user_tenant_id: {
-        Args: { _user_id: string }
-        Returns: string
-      }
+      get_user_tenant_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -779,6 +797,7 @@ export type Database = {
       report_format: "xlsx" | "csv" | "pdf"
       report_type: "monthly_trips" | "department_cost" | "invoice_summary"
       trip_type: "one_way" | "round_trip" | "recurring"
+      vehicle_type: "human_driver" | "autonomous" | "no_preference"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -913,6 +932,7 @@ export const Constants = {
       report_format: ["xlsx", "csv", "pdf"],
       report_type: ["monthly_trips", "department_cost", "invoice_summary"],
       trip_type: ["one_way", "round_trip", "recurring"],
+      vehicle_type: ["human_driver", "autonomous", "no_preference"],
     },
   },
 } as const

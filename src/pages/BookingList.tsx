@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Database } from 'lucide-react';
+import { Plus, Database, User, Car, HelpCircle } from 'lucide-react';
 
 type BookingStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
@@ -20,6 +20,9 @@ interface Booking {
   pickup_address: string;
   dropoff_address: string;
   trip_type: string;
+  preferred_vehicle_type: 'human_driver' | 'autonomous' | 'no_preference';
+  actual_vehicle_type?: 'human_driver' | 'autonomous' | 'no_preference';
+  vehicle_type_notes?: string;
   passengers: { name: string };
 }
 
@@ -101,6 +104,27 @@ export default function BookingList() {
     };
 
     return <Badge variant={variants[status]}>{statusLabels[status]}</Badge>;
+  };
+
+  const getVehicleTypeIcon = (vehicleType: string) => {
+    switch (vehicleType) {
+      case 'human_driver':
+        return <User className="h-4 w-4 text-blue-600" />;
+      case 'autonomous':
+        return <Car className="h-4 w-4 text-green-600" />;
+      case 'no_preference':
+      default:
+        return <HelpCircle className="h-4 w-4 text-gray-400" />;
+    }
+  };
+
+  const getVehicleTypeLabel = (vehicleType: string) => {
+    const labels: Record<string, string> = {
+      human_driver: '人類司機',
+      autonomous: '自駕車',
+      no_preference: '無偏好',
+    };
+    return labels[vehicleType] || '未指定';
   };
 
   const handleCancelBooking = async (bookingId: string) => {
@@ -214,6 +238,7 @@ export default function BookingList() {
                   <TableHead>下車地點</TableHead>
                   <TableHead>預約時間</TableHead>
                   <TableHead>趟次類型</TableHead>
+                  <TableHead>車輛類型</TableHead>
                   <TableHead>狀態</TableHead>
                   <TableHead>操作</TableHead>
                 </TableRow>
@@ -230,6 +255,20 @@ export default function BookingList() {
                     </TableCell>
                     <TableCell>
                       {booking.trip_type === 'one_way' ? '單程' : '來回'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {getVehicleTypeIcon(booking.preferred_vehicle_type)}
+                        <span className="text-sm">
+                          {getVehicleTypeLabel(booking.preferred_vehicle_type)}
+                        </span>
+                        {booking.actual_vehicle_type && 
+                         booking.actual_vehicle_type !== booking.preferred_vehicle_type && (
+                          <Badge variant="outline" className="text-xs">
+                            改派: {getVehicleTypeLabel(booking.actual_vehicle_type)}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(booking.status)}</TableCell>
                     <TableCell>

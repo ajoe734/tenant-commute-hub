@@ -167,6 +167,8 @@ Deno.serve(async (req) => {
         estimated_cost: 1200,
         cost_center_id: createdCostCenters[0].id,
         booking_number: `BK${Date.now()}001`,
+        preferred_vehicle_type: 'human_driver',
+        actual_vehicle_type: 'human_driver',
       },
       {
         passenger_id: createdPassengers[1].id,
@@ -182,9 +184,11 @@ Deno.serve(async (req) => {
         trip_type: 'one_way',
         status: 'completed',
         estimated_cost: 350,
-        actual_cost: 350,
+        actual_cost: 315, // 自駕車 10% 折扣
         cost_center_id: createdCostCenters[1].id,
         booking_number: `BK${Date.now()}002`,
+        preferred_vehicle_type: 'autonomous',
+        actual_vehicle_type: 'autonomous',
       },
       {
         passenger_id: createdPassengers[2].id,
@@ -202,6 +206,9 @@ Deno.serve(async (req) => {
         estimated_cost: 800,
         cost_center_id: createdCostCenters[2].id,
         booking_number: `BK${Date.now()}003`,
+        preferred_vehicle_type: 'autonomous',
+        actual_vehicle_type: 'human_driver',
+        vehicle_type_notes: '因路線不適合自駕車，已改派人類司機（保留優惠折扣）',
       },
       {
         passenger_id: createdPassengers[3].id,
@@ -219,6 +226,7 @@ Deno.serve(async (req) => {
         estimated_cost: 300,
         cost_center_id: createdCostCenters[3].id,
         booking_number: `BK${Date.now()}004`,
+        preferred_vehicle_type: 'no_preference',
       },
       {
         passenger_id: createdPassengers[4].id,
@@ -236,6 +244,8 @@ Deno.serve(async (req) => {
         estimated_cost: 450,
         cost_center_id: createdCostCenters[4].id,
         booking_number: `BK${Date.now()}005`,
+        preferred_vehicle_type: 'no_preference',
+        actual_vehicle_type: 'autonomous',
       },
     ];
 
