@@ -57,6 +57,23 @@ const Login = () => {
     setIsLoading(false);
   };
 
+  const handleTestLogin = async () => {
+    setIsLoading(true);
+    
+    const testEmail = "test@example.com";
+    const testPassword = "test123456";
+    
+    const { error } = await signIn(testEmail, testPassword);
+    
+    if (error) {
+      toast.error('測試帳號登入失敗，可能尚未建立');
+    } else {
+      toast.success('登入成功！');
+    }
+    
+    setIsLoading(false);
+  };
+
   const handleCreateTestUser = async () => {
     setIsCreatingTestUser(true);
     
@@ -118,9 +135,17 @@ const Login = () => {
               <CardContent>
                 <Alert className="mb-4 border-primary/20 bg-primary/5">
                   <Info className="h-4 w-4" />
-                  <AlertTitle>快速測試</AlertTitle>
-                  <AlertDescription className="text-sm">
-                    點擊下方按鈕即可建立並登入測試帳號，無需手動註冊
+                  <AlertTitle>測試帳號</AlertTitle>
+                  <AlertDescription className="space-y-1">
+                    <div className="text-sm">
+                      <strong>帳號：</strong> test@example.com
+                    </div>
+                    <div className="text-sm">
+                      <strong>密碼：</strong> test123456
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-2">
+                      可直接使用測試帳號登入，或建立新的測試帳號
+                    </div>
                   </AlertDescription>
                 </Alert>
                 <form onSubmit={handleSignIn} className="space-y-4">
@@ -166,19 +191,31 @@ const Login = () => {
                     <span className="w-full border-t border-border" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">或</span>
+                    <span className="bg-card px-2 text-muted-foreground">快速測試</span>
                   </div>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleCreateTestUser}
-                  disabled={isCreatingTestUser}
-                >
-                  {isCreatingTestUser ? "建立中..." : "一鍵建立並登入測試帳號"}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={handleTestLogin}
+                    disabled={isLoading || isCreatingTestUser}
+                  >
+                    一鍵登入測試帳號
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleCreateTestUser}
+                    disabled={isLoading || isCreatingTestUser}
+                  >
+                    {isCreatingTestUser ? "建立中..." : "建立新的測試帳號"}
+                  </Button>
+                </div>
               </CardContent>
             </TabsContent>
 
