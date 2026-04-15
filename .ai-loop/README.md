@@ -1,51 +1,73 @@
-# .ai-loop — Lovable ↔ VS Code ↔ GitHub Closed Loop
+# .ai-loop — Lovable ↔ GitHub ↔ drts-fleet-platform Closed Loop
 
-This directory is the bridge between two repos:
+Fully GitHub-driven. No manual steps needed after initial setup.
 
-- **`drts-fleet-platform`** (backend, source of truth) — managed in VS Code by LLM workers
-- **`tenant-commute-hub`** (this repo, frontend UI) — managed by Lovable
-
-## Workflow
+## Flow
 
 ```
-VS Code LLM
-  → writes FRONTEND_CHANGE_SPEC.md + FRONTEND_CHANGE_SPEC.json
-  → commits + pushes
+① VS Code LLM (drts-fleet-platform)
+    writes .ai-loop-outgoing/FRONTEND_CHANGE_SPEC.json
+    ──push──▶ GitHub Action (push-delivery-note.yml)
+                copies spec → tenant-commute-hub/.ai-loop/
+                [skip ci] commit + push to tenant-commute-hub
 
-Lovable
-  → reads FRONTEND_CHANGE_SPEC.json
-  → implements UI changes
-  → writes LOVABLE_CHANGE_FEEDBACK.md + API_GAP_REQUESTS.json
-  → commits + pushes
+② Lovable
+    detects new FRONTEND_CHANGE_SPEC.json on GitHub
+    implements UI changes
+    ──push──▶ tenant-commute-hub/.ai-loop/LOVABLE_CHANGE_FEEDBACK.md
+              tenant-commute-hub/.ai-loop/API_GAP_REQUESTS.json
 
-VS Code LLM
-  → reads LOVABLE_CHANGE_FEEDBACK.md + API_GAP_REQUESTS.json
-  → opens issues / adds API endpoints / updates contracts in drts-fleet-platform
-  → writes BACKEND_DELIVERY_NOTE.md + updates CONTRACT_VERSION.lock
-  → commits + pushes to drts-fleet-platform, then here
+③ GitHub Action (notify-core-on-feedback.yml) in tenant-commute-hub
+    detects push to LOVABLE_CHANGE_FEEDBACK.md / API_GAP_REQUESTS.json
+    ──repository_dispatch──▶ drts-fleet-platform (event: frontend-feedback)
 
-Lovable
-  → reads BACKEND_DELIVERY_NOTE.md
-  → wires up new API calls
-  → next iteration begins
+④ GitHub Action (receive-frontend-feedback.yml) in drts-fleet-platform
+    fetches feedback files → saves to .ai-loop-incoming/
+    enqueues orchestrator event → .orchestrator/event-queue.jsonl
+    [skip ci] commit + push
+
+⑤ VS Code LLM orchestrator wakes up
+    reads .ai-loop-incoming/LOVABLE_CHANGE_FEEDBACK.md
+    reads .ai-loop-incoming/API_GAP_REQUESTS.json
+    adds missing API endpoints, contracts, SDK types
+    writes .ai-loop-outgoing/BACKEND_DELIVERY_NOTE.md
+    updates .ai-loop-outgoing/CONTRACT_VERSION.lock
+    ──push──▶ GitHub Action (push-delivery-note.yml) → back to ①
 ```
 
-## Files
+## Files in this repo (.ai-loop/)
 
-| File | Written by | Read by | Purpose |
-|------|-----------|---------|---------|
-| `FRONTEND_CHANGE_SPEC.md` | VS Code LLM | Lovable | Human-readable spec for this iteration's UI changes |
-| `FRONTEND_CHANGE_SPEC.json` | VS Code LLM | Lovable | Machine-readable spec (components, routes, API calls needed) |
-| `LOVABLE_CHANGE_FEEDBACK.md` | Lovable | VS Code LLM | Summary of what was built and what APIs are missing |
-| `API_GAP_REQUESTS.json` | Lovable | VS Code LLM | Structured list of missing/broken API endpoints |
-| `UI_DECISIONS.md` | Both | Both | Persistent record of UI architecture decisions |
-| `QA_STATUS.md` | Both | Both | Current QA status — what's verified, what's broken |
-| `BACKEND_DELIVERY_NOTE.md` | VS Code LLM | Lovable | Announces new API endpoints/contracts available in drts-fleet-platform |
-| `CONTRACT_VERSION.lock` | VS Code LLM | Lovable | Locks the drts-fleet-platform contract commit this frontend is aligned with |
+| File | Written by | Purpose |
+|------|-----------|---------|
+| `FRONTEND_CHANGE_SPEC.md` | drts-fleet-platform (via push-delivery-note.yml) | Human-readable spec for Lovable |
+| `FRONTEND_CHANGE_SPEC.json` | drts-fleet-platform (via push-delivery-note.yml) | Machine-readable task list for Lovable |
+| `LOVABLE_CHANGE_FEEDBACK.md` | Lovable | What was done, what's missing |
+| `API_GAP_REQUESTS.json` | Lovable | Structured list of missing API / fields / enums |
+| `UI_DECISIONS.md` | Both | Persistent UI architecture decisions |
+| `QA_STATUS.md` | Both | QA tracking across pages |
+| `BACKEND_DELIVERY_NOTE.md` | drts-fleet-platform (via push-delivery-note.yml) | New API endpoints / contracts delivered |
+| `CONTRACT_VERSION.lock` | drts-fleet-platform (via push-delivery-note.yml) | Locked contract commit hash |
 
-## Rules
+## Files in drts-fleet-platform
 
-1. **Never edit CONTRACT_VERSION.lock manually** — only VS Code LLM updates it after verified backend delivery
-2. **API_GAP_REQUESTS.json is append-only per iteration** — do not delete resolved gaps, mark them `resolved`
-3. **FRONTEND_CHANGE_SPEC.json drives Lovable** — all UI work in an iteration must trace to a spec entry
-4. **Boundary contract** — see `drts-fleet-platform/docs/02-architecture/tenant-commute-hub-boundary.md` for what the frontend is and is not allowed to do
+| Path | Purpose |
+|------|---------|
+| `.ai-loop-outgoing/` | VS Code LLM writes here; GitHub Action pushes to tenant |
+| `.ai-loop-incoming/` | GitHub Action writes here when Lovable pushes feedback |
+| `.github/workflows/push-delivery-note.yml` | Pushes outgoing files to tenant-commute-hub |
+| `.github/workflows/receive-frontend-feedback.yml` | Receives repository_dispatch from tenant |
+
+## Required GitHub Secrets
+
+### In tenant-commute-hub
+| Secret | Value |
+|--------|-------|
+| `CORE_REPO_PAT` | PAT with `repo` scope on `drts-fleet-platform` |
+
+### In drts-fleet-platform
+| Secret | Value |
+|--------|-------|
+| `TENANT_REPO_PAT` | PAT with `repo` scope on `tenant-commute-hub` |
+
+## Boundary contract
+`drts-fleet-platform/docs/02-architecture/tenant-commute-hub-boundary.md`

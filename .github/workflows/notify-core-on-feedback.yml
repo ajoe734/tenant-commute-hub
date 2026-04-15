@@ -1,0 +1,37 @@
+name: Notify core repo on Lovable feedback
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.ai-loop/LOVABLE_CHANGE_FEEDBACK.md'
+      - '.ai-loop/API_GAP_REQUESTS.json'
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    # Skip if this commit was pushed by GitHub Actions itself (delivery note push)
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read iteration from spec
+        id: meta
+        run: |
+          ITER=$(jq -r '.iteration // 0' .ai-loop/FRONTEND_CHANGE_SPEC.json 2>/dev/null || echo "0")
+          echo "iteration=$ITER" >> $GITHUB_OUTPUT
+
+      - name: Dispatch frontend-feedback to drts-fleet-platform
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.CORE_REPO_PAT }}
+          repository: ajoe734/drts-fleet-platform
+          event-type: frontend-feedback
+          client-payload: >-
+            {
+              "iteration": "${{ steps.meta.outputs.iteration }}",
+              "commit": "${{ github.sha }}",
+              "pusher": "${{ github.actor }}",
+              "feedback_url": "https://raw.githubusercontent.com/ajoe734/tenant-commute-hub/main/.ai-loop/LOVABLE_CHANGE_FEEDBACK.md",
+              "gaps_url": "https://raw.githubusercontent.com/ajoe734/tenant-commute-hub/main/.ai-loop/API_GAP_REQUESTS.json"
+            }
