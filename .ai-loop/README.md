@@ -62,12 +62,12 @@ Fully GitHub-driven. No manual steps needed after initial setup.
 ### In tenant-commute-hub
 | Secret | Value |
 |--------|-------|
-| `CORE_REPO_PAT` | PAT with `repo` scope on `drts-fleet-platform` |
+| `TENANT_REPO_PAT` | PAT with `repo` scope — used to dispatch to `drts-fleet-platform` |
 
 ### In drts-fleet-platform
 | Secret | Value |
 |--------|-------|
-| `TENANT_REPO_PAT` | PAT with `repo` scope on `tenant-commute-hub` |
+| `CORE_REPO_PAT` | PAT with `repo` scope — used to push to `tenant-commute-hub` |
 
 ## Boundary contract
 `drts-fleet-platform/docs/02-architecture/tenant-commute-hub-boundary.md`

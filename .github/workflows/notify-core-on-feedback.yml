@@ -24,7 +24,7 @@ jobs:
       - name: Dispatch frontend-feedback to drts-fleet-platform
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.CORE_REPO_PAT }}
+          token: ${{ secrets.TENANT_REPO_PAT }}
           repository: ajoe734/drts-fleet-platform
           event-type: frontend-feedback
           client-payload: >-
