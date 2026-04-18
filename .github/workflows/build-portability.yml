@@ -1,0 +1,61 @@
+name: Verify build portability
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  HAS_TENANT_REPO_PAT: ${{ secrets.TENANT_REPO_PAT != '' }}
+
+jobs:
+  build-with-core-checkout:
+    if: ${{ env.HAS_TENANT_REPO_PAT == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tenant repo
+        uses: actions/checkout@v4
+
+      - name: Checkout drts-fleet-platform
+        uses: actions/checkout@v4
+        with:
+          repository: ajoe734/drts-fleet-platform
+          path: drts-fleet-platform
+          token: ${{ secrets.TENANT_REPO_PAT }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build against canonical sibling checkout
+        env:
+          DRTS_CORE_REPO_PATH: ${{ github.workspace }}/drts-fleet-platform
+        run: npm run build
+
+  build-with-local-shim:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tenant repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build without sibling checkout
+        env:
+          DRTS_DISABLE_CORE_ALIAS: "1"
+        run: npm run build
