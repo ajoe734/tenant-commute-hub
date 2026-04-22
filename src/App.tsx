@@ -2,26 +2,36 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./contexts/AuthContext";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import BookingList from "./pages/BookingList";
-import NewBooking from "./pages/NewBooking";
-import PassengerManagement from "./pages/PassengerManagement";
-import CostCenterManagement from "./pages/CostCenterManagement";
-import ReportManagement from "./pages/ReportManagement";
-import ApiKeyManagement from "./pages/ApiKeyManagement";
-import BillingManagement from "./pages/BillingManagement";
-import NotificationSettings from "./pages/NotificationSettings";
-import AdminPanel from "./pages/AdminPanel";
-import AuditLog from "./pages/AuditLog";
-import AddressManagement from "./pages/AddressManagement";
 import DashboardLayout from "./components/DashboardLayout";
+import { AuthProvider } from "./contexts/AuthContext";
+import AddressManagement from "./pages/AddressManagement";
+import AdminPanel from "./pages/AdminPanel";
+import ApiKeyManagement from "./pages/ApiKeyManagement";
+import AuditLog from "./pages/AuditLog";
+import BillingManagement from "./pages/BillingManagement";
+import BookingDetail from "./pages/BookingDetail";
+import BookingList from "./pages/BookingList";
+import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+import NewBooking from "./pages/NewBooking";
 import NotFound from "./pages/NotFound";
+import NotificationSettings from "./pages/NotificationSettings";
+import PassengerManagement from "./pages/PassengerManagement";
+import ReportManagement from "./pages/ReportManagement";
+import SlaManagement from "./pages/SlaManagement";
+import WebhookManagement from "./pages/WebhookManagement";
 
 const queryClient = new QueryClient();
+
+function withShell(element: JSX.Element) {
+  return (
+    <ProtectedRoute>
+      <DashboardLayout>{element}</DashboardLayout>
+    </ProtectedRoute>
+  );
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -31,129 +41,31 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={withShell(<Dashboard />)} />
             <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/bookings" element={<Navigate to="/booking-list" replace />} />
+            <Route path="/admin" element={<Navigate to="/users" replace />} />
+            <Route path="/cost-centers" element={<Navigate to="/" replace />} />
+            <Route path="/booking-list" element={withShell(<BookingList />)} />
             <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Dashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
+              path="/booking-list/:bookingId"
+              element={withShell(<BookingDetail />)}
             />
-            <Route
-              path="/bookings"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <BookingList />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/bookings/new"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <NewBooking />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/passengers"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <PassengerManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cost-centers"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <CostCenterManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reports"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <ReportManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/api-keys"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <ApiKeyManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/billing"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <BillingManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/bookings/new" element={withShell(<NewBooking />)} />
+            <Route path="/passengers" element={withShell(<PassengerManagement />)} />
+            <Route path="/addresses" element={withShell(<AddressManagement />)} />
+            <Route path="/reports" element={withShell(<ReportManagement />)} />
+            <Route path="/api-keys" element={withShell(<ApiKeyManagement />)} />
+            <Route path="/webhooks" element={withShell(<WebhookManagement />)} />
+            <Route path="/billing" element={withShell(<BillingManagement />)} />
             <Route
               path="/notifications"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <NotificationSettings />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
+              element={withShell(<NotificationSettings />)}
             />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <AdminPanel />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/audit"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <AuditLog />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/addresses"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <AddressManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/sla" element={withShell(<SlaManagement />)} />
+            <Route path="/users" element={withShell(<AdminPanel />)} />
+            <Route path="/audit" element={withShell(<AuditLog />)} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

@@ -1,10 +1,15 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  GenerateTenantInvoiceCommand,
+  TenantBillingProfile,
+  TenantInvoiceRecord,
+  UpdateTenantBillingProfileCommand,
+} from "@drts/contracts";
+import { CreditCard, Download, FileSpreadsheet, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CreditCard, Download, DollarSign, Calendar, TrendingUp, Database } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -13,258 +18,453 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/contexts/AuthContext";
+import { formatDate, formatDateTime, formatMoney, toErrorMessage } from "@/lib/formatting";
+import { toast } from "sonner";
 
-interface Invoice {
-  id: string;
-  invoice_number: string;
-  period_start: string;
-  period_end: string;
-  total_amount: number;
-  tax_amount: number | null;
-  paid_at: string | null;
-  pdf_url: string | null;
-  created_at: string;
+interface BillingFormState {
+  invoiceTitle: string;
+  taxId: string;
+  address: string;
+  contactName: string;
+  email: string;
 }
 
-const BillingManagement = () => {
-  const { profile } = useAuth();
-  const { toast } = useToast();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [generatingDemo, setGeneratingDemo] = useState(false);
-  const [stats, setStats] = useState({
-    currentMonth: 0,
-    lastMonth: 0,
-    unpaidTotal: 0,
+interface InvoiceRangeForm {
+  periodStart: string;
+  periodEnd: string;
+}
+
+const EMPTY_BILLING_FORM: BillingFormState = {
+  invoiceTitle: "",
+  taxId: "",
+  address: "",
+  contactName: "",
+  email: "",
+};
+
+function toBillingForm(profile: TenantBillingProfile): BillingFormState {
+  return {
+    invoiceTitle: profile.invoiceTitle,
+    taxId: profile.taxId ?? "",
+    address: profile.address ?? "",
+    contactName: profile.contactName ?? "",
+    email: profile.email,
+  };
+}
+
+function firstDayOfPreviousMonth(): string {
+  const date = new Date();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function lastDayOfPreviousMonth(): string {
+  const date = new Date();
+  date.setUTCDate(0);
+  return date.toISOString().slice(0, 10);
+}
+
+export default function BillingManagement() {
+  const { client, profile } = useAuth();
+  const [billingProfile, setBillingProfile] =
+    useState<TenantBillingProfile | null>(null);
+  const [invoices, setInvoices] = useState<TenantInvoiceRecord[]>([]);
+  const [billingForm, setBillingForm] =
+    useState<BillingFormState>(EMPTY_BILLING_FORM);
+  const [invoiceRange, setInvoiceRange] = useState<InvoiceRangeForm>({
+    periodStart: firstDayOfPreviousMonth(),
+    periodEnd: lastDayOfPreviousMonth(),
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const orderedInvoices = useMemo(
+    () =>
+      [...invoices].sort((left, right) =>
+        right.periodEnd.localeCompare(left.periodEnd),
+      ),
+    [invoices],
+  );
+
+  const stats = useMemo(() => {
+    const issuedMinor = orderedInvoices.reduce(
+      (sum, invoice) => sum + invoice.amount.amountMinor,
+      0,
+    );
+    const paidMinor = orderedInvoices
+      .filter((invoice) => invoice.status === "paid")
+      .reduce((sum, invoice) => sum + invoice.amount.amountMinor, 0);
+    const outstandingMinor = orderedInvoices
+      .filter((invoice) => invoice.status !== "paid")
+      .reduce((sum, invoice) => sum + invoice.amount.amountMinor, 0);
+
+    return {
+      issuedMinor,
+      paidMinor,
+      outstandingMinor,
+      currency: orderedInvoices[0]?.amount.currency ?? "TWD",
+    };
+  }, [orderedInvoices]);
 
   useEffect(() => {
-    fetchInvoices();
-  }, [profile]);
-
-  const fetchInvoices = async () => {
-    if (!profile?.tenant_id) return;
-    
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("invoices")
-      .select("*")
-      .eq("tenant_id", profile.tenant_id)
-      .order("period_end", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching invoices:", error);
-      toast({
-        title: "載入失敗",
-        description: "無法載入發票資料",
-        variant: "destructive",
-      });
-    } else {
-      setInvoices(data || []);
-      calculateStats(data || []);
-    }
-    setLoading(false);
-  };
-
-  const calculateStats = (invoices: Invoice[]) => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    const currentMonthTotal = invoices
-      .filter((inv) => {
-        const date = new Date(inv.period_end);
-        return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-      })
-      .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
-
-    const lastMonthTotal = invoices
-      .filter((inv) => {
-        const date = new Date(inv.period_end);
-        return date.getMonth() === currentMonth - 1 && date.getFullYear() === currentYear;
-      })
-      .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
-
-    const unpaidTotal = invoices
-      .filter((inv) => !inv.paid_at)
-      .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
-
-    setStats({
-      currentMonth: currentMonthTotal,
-      lastMonth: lastMonthTotal,
-      unpaidTotal,
-    });
-  };
-
-  const downloadInvoice = (url: string | null) => {
-    if (!url) {
-      toast({
-        title: "下載失敗",
-        description: "發票檔案尚未產生",
-        variant: "destructive",
-      });
+    if (!client) {
       return;
     }
-    window.open(url, "_blank");
+
+    let active = true;
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [nextProfile, nextInvoices] = await Promise.all([
+          client.getBillingProfile(),
+          client.listInvoices(),
+        ]);
+        if (!active) {
+          return;
+        }
+        setBillingProfile(nextProfile as TenantBillingProfile);
+        setBillingForm(toBillingForm(nextProfile as TenantBillingProfile));
+        setInvoices(nextInvoices);
+        setError(null);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(toErrorMessage(loadError));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const refreshData = async () => {
+    if (!client) {
+      return;
+    }
+    const [nextProfile, nextInvoices] = await Promise.all([
+      client.getBillingProfile(),
+      client.listInvoices(),
+    ]);
+    setBillingProfile(nextProfile as TenantBillingProfile);
+    setBillingForm(toBillingForm(nextProfile as TenantBillingProfile));
+    setInvoices(nextInvoices);
   };
 
-  const handleGenerateDemoData = async () => {
-    setGeneratingDemo(true);
+  const handleProfileSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client) {
+      return;
+    }
+
+    setSaving(true);
     try {
-      const { error } = await supabase.functions.invoke('seed-demo-data');
-
-      if (error) throw error;
-
-      toast({
-        title: '成功',
-        description: 'Demo 資料已建立',
-      });
-
-      fetchInvoices();
-    } catch (error: any) {
-      console.error('Error generating demo data:', error);
-      toast({
-        title: '錯誤',
-        description: error.message || '建立 Demo 資料失敗',
-        variant: 'destructive',
-      });
+      const command: UpdateTenantBillingProfileCommand = {
+        invoiceTitle: billingForm.invoiceTitle.trim(),
+        email: billingForm.email.trim(),
+        ...(billingForm.taxId.trim() ? { taxId: billingForm.taxId.trim() } : {}),
+        ...(billingForm.address.trim()
+          ? { address: billingForm.address.trim() }
+          : {}),
+        ...(billingForm.contactName.trim()
+          ? { contactName: billingForm.contactName.trim() }
+          : {}),
+      };
+      const nextProfile = await client.post<TenantBillingProfile>(
+        "/api/tenant/billing/profile",
+        { body: command },
+      );
+      setBillingProfile(nextProfile);
+      setBillingForm(toBillingForm(nextProfile));
+      toast.success("Billing profile updated.");
+    } catch (submitError) {
+      const message = toErrorMessage(submitError);
+      setError(message);
+      toast.error(message);
     } finally {
-      setGeneratingDemo(false);
+      setSaving(false);
     }
   };
+
+  const handleGenerateInvoice = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client || !profile?.tenant_id) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const command: GenerateTenantInvoiceCommand = {
+        tenantId: profile.tenant_id,
+        periodStart: new Date(`${invoiceRange.periodStart}T00:00:00.000Z`).toISOString(),
+        periodEnd: new Date(`${invoiceRange.periodEnd}T23:59:59.999Z`).toISOString(),
+      };
+      await client.post<TenantInvoiceRecord>("/api/tenant/invoices/generate", {
+        body: command,
+      });
+      await refreshData();
+      toast.success("Invoice generated or returned from existing authority record.");
+    } catch (generateError) {
+      const message = toErrorMessage(generateError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatMinorAmount = (amountMinor: number, currency: string) =>
+    `${currency} ${(amountMinor / 100).toFixed(2)}`;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">付款與發票</h2>
-        <p className="text-muted-foreground">管理您的帳務與發票記錄</p>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">本月費用</CardTitle>
-            <DollarSign className="h-4 w-4 text-primary" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Issued invoices
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              ${stats.currentMonth.toLocaleString()}
-            </div>
-            <div className="flex items-center text-xs text-muted-foreground mt-1">
-              <TrendingUp
-                className={`mr-1 h-3 w-3 ${
-                  stats.currentMonth >= stats.lastMonth
-                    ? "text-success"
-                    : "text-destructive rotate-180"
-                }`}
-              />
-              <span>較上月</span>
+            <div className="text-2xl font-bold">
+              {formatMinorAmount(stats.issuedMinor, stats.currency)}
             </div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">上月費用</CardTitle>
-            <Calendar className="h-4 w-4 text-accent" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Paid
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              ${stats.lastMonth.toLocaleString()}
+            <div className="text-2xl font-bold">
+              {formatMinorAmount(stats.paidMinor, stats.currency)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">已結算</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">未付款</CardTitle>
-            <CreditCard className="h-4 w-4 text-destructive" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Outstanding
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              ${stats.unpaidTotal.toLocaleString()}
+            <div className="text-2xl font-bold">
+              {formatMinorAmount(stats.outstandingMinor, stats.currency)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">待處理</p>
           </CardContent>
         </Card>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5" />
-            發票記錄
-          </CardTitle>
-          <CardDescription>您的歷史發票與付款狀態</CardDescription>
+          <CardTitle>Billing Profile</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="grid gap-4 md:grid-cols-2"
+            onSubmit={(event) => void handleProfileSubmit(event)}
+          >
+            <div className="space-y-2">
+              <Label>Invoice title</Label>
+              <Input
+                value={billingForm.invoiceTitle}
+                onChange={(event) =>
+                  setBillingForm((current) => ({
+                    ...current,
+                    invoiceTitle: event.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Billing email</Label>
+              <Input
+                type="email"
+                value={billingForm.email}
+                onChange={(event) =>
+                  setBillingForm((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tax ID</Label>
+              <Input
+                value={billingForm.taxId}
+                onChange={(event) =>
+                  setBillingForm((current) => ({
+                    ...current,
+                    taxId: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Contact name</Label>
+              <Input
+                value={billingForm.contactName}
+                onChange={(event) =>
+                  setBillingForm((current) => ({
+                    ...current,
+                    contactName: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Billing address</Label>
+              <Textarea
+                rows={3}
+                value={billingForm.address}
+                onChange={(event) =>
+                  setBillingForm((current) => ({
+                    ...current,
+                    address: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Button type="submit" disabled={saving}>
+                <CreditCard className="mr-2 h-4 w-4" />
+                {saving ? "Saving..." : "Save billing profile"}
+              </Button>
+            </div>
+          </form>
+
+          {billingProfile && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Last synced from authority: {formatDateTime(billingProfile.updatedAt)}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Generate Invoice</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="grid gap-4 md:grid-cols-3"
+            onSubmit={(event) => void handleGenerateInvoice(event)}
+          >
+            <div className="space-y-2">
+              <Label>Period start</Label>
+              <Input
+                type="date"
+                value={invoiceRange.periodStart}
+                onChange={(event) =>
+                  setInvoiceRange((current) => ({
+                    ...current,
+                    periodStart: event.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Period end</Label>
+              <Input
+                type="date"
+                value={invoiceRange.periodEnd}
+                onChange={(event) =>
+                  setInvoiceRange((current) => ({
+                    ...current,
+                    periodEnd: event.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="flex items-end">
+              <Button type="submit" disabled={saving}>
+                <ReceiptText className="mr-2 h-4 w-4" />
+                {saving ? "Generating..." : "Generate"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Invoice Ledger</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">載入中...</div>
-          ) : invoices.length === 0 ? (
-            <div className="text-center py-12">
-              <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-4">
-                尚無發票記錄
-              </p>
-              <Button 
-                variant="outline" 
-                onClick={handleGenerateDemoData}
-                disabled={generatingDemo}
-              >
-                <Database className="mr-2 h-4 w-4" />
-                {generatingDemo ? '產生中...' : '產生 Demo 資料'}
-              </Button>
+            <div className="py-8 text-center text-muted-foreground">載入中...</div>
+          ) : orderedInvoices.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+              No tenant invoices have been issued yet.
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>發票號碼</TableHead>
-                  <TableHead>計費週期</TableHead>
-                  <TableHead>金額</TableHead>
-                  <TableHead>稅額</TableHead>
-                  <TableHead>狀態</TableHead>
-                  <TableHead>付款時間</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
+                  <TableHead>Invoice ID</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Line Items</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead>Artifact</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
-                    <TableCell className="font-mono">{invoice.invoice_number}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {format(new Date(invoice.period_start), "yyyy-MM-dd")} -{" "}
-                      {format(new Date(invoice.period_end), "yyyy-MM-dd")}
-                    </TableCell>
-                    <TableCell className="font-semibold">
-                      ${Number(invoice.total_amount).toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {invoice.tax_amount ? `$${Number(invoice.tax_amount).toLocaleString()}` : "-"}
+                {orderedInvoices.map((invoice) => (
+                  <TableRow key={invoice.invoiceId}>
+                    <TableCell className="font-medium">
+                      {invoice.invoiceId}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={invoice.paid_at ? "default" : "destructive"}>
-                        {invoice.paid_at ? "已付款" : "未付款"}
-                      </Badge>
+                      {formatDate(invoice.periodStart)} - {formatDate(invoice.periodEnd)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {invoice.paid_at
-                        ? format(new Date(invoice.paid_at), "yyyy-MM-dd HH:mm")
-                        : "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => downloadInvoice(invoice.pdf_url)}
-                        disabled={!invoice.pdf_url}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        下載
-                      </Button>
+                    <TableCell>{formatMoney(invoice.amount)}</TableCell>
+                    <TableCell>{invoice.status}</TableCell>
+                    <TableCell>{invoice.lines.length}</TableCell>
+                    <TableCell>{formatDateTime(invoice.updatedAt)}</TableCell>
+                    <TableCell>
+                      {invoice.artifactUrl ? (
+                        <a
+                          className="inline-flex items-center gap-2 text-primary hover:underline"
+                          href={invoice.artifactUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <Download className="h-4 w-4" />
+                          Download
+                        </a>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 text-muted-foreground">
+                          <FileSpreadsheet className="h-4 w-4" />
+                          Pending
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -275,6 +475,4 @@ const BillingManagement = () => {
       </Card>
     </div>
   );
-};
-
-export default BillingManagement;
+}

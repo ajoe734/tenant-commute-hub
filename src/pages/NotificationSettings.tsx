@@ -1,280 +1,292 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  NotificationRecord,
+  TenantNotificationPreferences,
+  TenantNotificationSubscription,
+  UpdateTenantNotificationsCommand,
+} from "@drts/contracts";
+import { Bell, Mail, RadioTower, Webhook } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Bell, Mail, MessageSquare, CheckCircle2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { formatDateTime, toErrorMessage } from "@/lib/formatting";
+import { toast } from "sonner";
 
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  event_type: string;
-  channel: string;
-  is_read: boolean;
-  created_at: string;
+interface SubscriptionTemplate {
+  eventType: string;
+  channel: TenantNotificationSubscription["channel"];
+  label: string;
+  description: string;
 }
 
-const NotificationSettings = () => {
-  const { profile } = useAuth();
-  const { toast } = useToast();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+const DEFAULT_SUBSCRIPTIONS: SubscriptionTemplate[] = [
+  {
+    eventType: "booking.created",
+    channel: "email",
+    label: "Booking created email",
+    description: "Notify tenant operators when a new booking is created.",
+  },
+  {
+    eventType: "booking.cancelled",
+    channel: "email",
+    label: "Booking cancelled email",
+    description: "Notify tenant operators when a booking is cancelled.",
+  },
+  {
+    eventType: "booking.updated",
+    channel: "ops_console",
+    label: "Ops console updates",
+    description: "Surface booking updates in the authority console feed.",
+  },
+  {
+    eventType: "tenant.sla.threshold_breach",
+    channel: "email",
+    label: "SLA breach email",
+    description: "Send email when tenant SLA thresholds are breached.",
+  },
+  {
+    eventType: "tenant.webhook.test",
+    channel: "webhook",
+    label: "Webhook test events",
+    description: "Allow authority-initiated webhook test events.",
+  },
+];
+
+function keyOf(subscription: TenantNotificationSubscription): string {
+  return `${subscription.eventType}:${subscription.channel}`;
+}
+
+function buildSubscriptions(
+  current: TenantNotificationSubscription[],
+): TenantNotificationSubscription[] {
+  const merged = new Map(
+    current.map((subscription) => [keyOf(subscription), subscription]),
+  );
+
+  for (const template of DEFAULT_SUBSCRIPTIONS) {
+    if (!merged.has(`${template.eventType}:${template.channel}`)) {
+      merged.set(`${template.eventType}:${template.channel}`, {
+        eventType: template.eventType,
+        channel: template.channel,
+        enabled: template.channel !== "webhook",
+      });
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function channelIcon(channel: TenantNotificationSubscription["channel"]) {
+  switch (channel) {
+    case "email":
+      return <Mail className="h-4 w-4" />;
+    case "webhook":
+      return <Webhook className="h-4 w-4" />;
+    case "ops_console":
+      return <RadioTower className="h-4 w-4" />;
+    default:
+      return <Bell className="h-4 w-4" />;
+  }
+}
+
+export default function NotificationSettings() {
+  const { client } = useAuth();
+  const [preferences, setPreferences] =
+    useState<TenantNotificationPreferences | null>(null);
+  const [subscriptions, setSubscriptions] = useState<
+    TenantNotificationSubscription[]
+  >([]);
+  const [feed, setFeed] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState({
-    emailBookingCreated: true,
-    emailBookingCancelled: true,
-    smsBookingReminder: false,
-    pushBookingUpdates: true,
-    emailWeeklyReport: true,
-  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const descriptions = useMemo(
+    () =>
+      new Map(
+        DEFAULT_SUBSCRIPTIONS.map((entry) => [
+          `${entry.eventType}:${entry.channel}`,
+          entry,
+        ]),
+      ),
+    [],
+  );
 
   useEffect(() => {
-    fetchNotifications();
-  }, [profile]);
-
-  const fetchNotifications = async () => {
-    if (!profile?.id) return;
-    
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .or(`user_id.eq.${profile.id},user_id.is.null`)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    if (error) {
-      console.error("Error fetching notifications:", error);
-    } else {
-      setNotifications(data || []);
+    if (!client) {
+      return;
     }
-    setLoading(false);
-  };
 
-  const markAsRead = async (id: string) => {
-    const { error } = await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("id", id);
+    let active = true;
 
-    if (error) {
-      toast({
-        title: "更新失敗",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      fetchNotifications();
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [nextPreferences, nextFeed] = await Promise.all([
+          client.getNotificationPreferences(),
+          client.listTenantNotificationFeed(),
+        ]);
+        if (!active) {
+          return;
+        }
+        setPreferences(nextPreferences as TenantNotificationPreferences);
+        setSubscriptions(
+          buildSubscriptions(
+            (nextPreferences as TenantNotificationPreferences).subscriptions,
+          ),
+        );
+        setFeed(nextFeed);
+        setError(null);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(toErrorMessage(loadError));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const handleSave = async () => {
+    if (!client) {
+      return;
     }
-  };
 
-  const markAllAsRead = async () => {
-    if (!profile?.id) return;
-
-    const { error } = await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("user_id", profile.id)
-      .eq("is_read", false);
-
-    if (error) {
-      toast({
-        title: "更新失敗",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      toast({ title: "已全部標記為已讀" });
-      fetchNotifications();
-    }
-  };
-
-  const saveSettings = () => {
-    toast({
-      title: "設定已儲存",
-      description: "通知偏好設定已更新",
-    });
-  };
-
-  const getChannelIcon = (channel: string) => {
-    switch (channel) {
-      case "email":
-        return <Mail className="h-4 w-4" />;
-      case "sms":
-        return <MessageSquare className="h-4 w-4" />;
-      case "push":
-        return <Bell className="h-4 w-4" />;
-      default:
-        return <Bell className="h-4 w-4" />;
+    setSaving(true);
+    try {
+      const command: UpdateTenantNotificationsCommand = {
+        subscriptions,
+      };
+      await client.updateNotifications(command);
+      const nextPreferences = await client.getNotificationPreferences();
+      setPreferences(nextPreferences as TenantNotificationPreferences);
+      setSubscriptions(
+        buildSubscriptions(
+          (nextPreferences as TenantNotificationPreferences).subscriptions,
+        ),
+      );
+      toast.success("Notification preferences updated.");
+    } catch (saveError) {
+      const message = toErrorMessage(saveError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">通知設定</h2>
-        <p className="text-muted-foreground">管理您的通知偏好與歷史記錄</p>
-      </div>
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>通知偏好</CardTitle>
-            <CardDescription>選擇您想接收的通知類型</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base">預約建立通知</Label>
-                  <p className="text-sm text-muted-foreground">新預約建立時發送 Email</p>
-                </div>
-                <Switch
-                  checked={settings.emailBookingCreated}
-                  onCheckedChange={(checked) =>
-                    setSettings({ ...settings, emailBookingCreated: checked })
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base">預約取消通知</Label>
-                  <p className="text-sm text-muted-foreground">預約被取消時發送 Email</p>
-                </div>
-                <Switch
-                  checked={settings.emailBookingCancelled}
-                  onCheckedChange={(checked) =>
-                    setSettings({ ...settings, emailBookingCancelled: checked })
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base">預約提醒簡訊</Label>
-                  <p className="text-sm text-muted-foreground">出發前 30 分鐘發送簡訊提醒</p>
-                </div>
-                <Switch
-                  checked={settings.smsBookingReminder}
-                  onCheckedChange={(checked) =>
-                    setSettings({ ...settings, smsBookingReminder: checked })
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base">即時推播通知</Label>
-                  <p className="text-sm text-muted-foreground">預約狀態更新時推播通知</p>
-                </div>
-                <Switch
-                  checked={settings.pushBookingUpdates}
-                  onCheckedChange={(checked) =>
-                    setSettings({ ...settings, pushBookingUpdates: checked })
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base">週報 Email</Label>
-                  <p className="text-sm text-muted-foreground">每週發送使用統計報告</p>
-                </div>
-                <Switch
-                  checked={settings.emailWeeklyReport}
-                  onCheckedChange={(checked) =>
-                    setSettings({ ...settings, emailWeeklyReport: checked })
-                  }
-                />
-              </div>
-            </div>
-
-            <Button onClick={saveSettings} className="w-full bg-gradient-primary">
-              儲存設定
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  通知中心
-                </CardTitle>
-                <CardDescription>最近的系統通知</CardDescription>
-              </div>
-              <Button variant="ghost" size="sm" onClick={markAllAsRead}>
-                全部標示為已讀
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8 text-muted-foreground">載入中...</div>
-            ) : notifications.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                目前沒有通知
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                {notifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`p-4 rounded-lg border transition-all ${
-                      notification.is_read
-                        ? "bg-background border-border"
-                        : "bg-primary/5 border-primary/20"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          {getChannelIcon(notification.channel)}
-                          <h4 className="font-medium text-sm">{notification.title}</h4>
-                          {!notification.is_read && (
-                            <Badge variant="default" className="ml-auto">新</Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground">{notification.message}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(notification.created_at), "yyyy-MM-dd HH:mm")}
-                        </p>
-                      </div>
-                      {!notification.is_read && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => markAsRead(notification.id)}
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                        </Button>
-                      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Notification Preferences</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loading ? (
+            <div className="py-8 text-center text-muted-foreground">載入中...</div>
+          ) : (
+            subscriptions.map((subscription) => {
+              const descriptor = descriptions.get(keyOf(subscription));
+              return (
+                <div
+                  key={keyOf(subscription)}
+                  className="flex items-center justify-between gap-4 rounded-lg border p-4"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 font-medium">
+                      {channelIcon(subscription.channel)}
+                      <span>{descriptor?.label ?? keyOf(subscription)}</span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {descriptor?.description ??
+                        `${subscription.eventType} via ${subscription.channel}`}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  <Switch
+                    checked={subscription.enabled}
+                    onCheckedChange={(enabled) =>
+                      setSubscriptions((current) =>
+                        current.map((candidate) =>
+                          keyOf(candidate) === keyOf(subscription)
+                            ? { ...candidate, enabled }
+                            : candidate,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+              );
+            })
+          )}
+
+          <div className="flex items-center justify-between gap-4 pt-2">
+            <div className="text-sm text-muted-foreground">
+              Authority last updated: {formatDateTime(preferences?.updatedAt)}
+            </div>
+            <Button type="button" disabled={saving || loading} onClick={() => void handleSave()}>
+              {saving ? "Saving..." : "Save preferences"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Authority Notification Feed</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="py-8 text-center text-muted-foreground">載入中...</div>
+          ) : feed.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+              No authority notifications recorded for this tenant.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {feed.map((notification) => (
+                <div
+                  key={notification.notificationId}
+                  className="rounded-lg border p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="font-medium">{notification.title}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {notification.message}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-muted-foreground">
+                      <div>{notification.channel}</div>
+                      <div>{notification.status}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {notification.createdAt
+                      ? formatDateTime(notification.createdAt)
+                      : "—"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
-};
-
-export default NotificationSettings;
+}

@@ -1,345 +1,296 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { useUserRole } from '@/hooks/useUserRole';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { toast } from '@/hooks/use-toast';
-import DashboardLayout from '@/components/DashboardLayout';
-import { Plus, Pencil, Trash2, Database } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import type {
+  TenantPassengerRecord,
+  UpsertTenantPassengerCommand,
+} from "@drts/contracts";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useAuth } from "@/contexts/AuthContext";
+import { formatDateTime, toErrorMessage } from "@/lib/formatting";
+import { toast } from "sonner";
 
-interface Passenger {
-  id: string;
-  name: string;
-  phone: string;
-  email: string | null;
-  department: string | null;
-  notes: string | null;
-  is_active: boolean;
+interface PassengerFormState {
+  passengerId?: string;
+  fullName: string;
+  employeeNo: string;
+  departmentName: string;
+  mobile: string;
+  email: string;
+  activeFlag: boolean;
+}
+
+const EMPTY_FORM: PassengerFormState = {
+  fullName: "",
+  employeeNo: "",
+  departmentName: "",
+  mobile: "",
+  email: "",
+  activeFlag: true,
+};
+
+function toFormState(passenger: TenantPassengerRecord): PassengerFormState {
+  return {
+    passengerId: passenger.passengerId,
+    fullName: passenger.fullName,
+    employeeNo: passenger.employeeNo ?? "",
+    departmentName: passenger.departmentName ?? "",
+    mobile: passenger.mobile ?? "",
+    email: passenger.email ?? "",
+    activeFlag: passenger.activeFlag,
+  };
 }
 
 export default function PassengerManagement() {
-  const { profile } = useAuth();
-  const { canManagePassengers } = useUserRole();
-  const [passengers, setPassengers] = useState<Passenger[]>([]);
+  const { client } = useAuth();
+  const [passengers, setPassengers] = useState<TenantPassengerRecord[]>([]);
+  const [form, setForm] = useState<PassengerFormState>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingPassenger, setEditingPassenger] = useState<Passenger | null>(null);
-  const [generatingDemo, setGeneratingDemo] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    department: '',
-    notes: '',
-  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const sortedPassengers = useMemo(
+    () =>
+      [...passengers].sort((left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt),
+      ),
+    [passengers],
+  );
 
   useEffect(() => {
-    fetchPassengers();
-  }, [profile]);
-
-  const fetchPassengers = async () => {
-    if (!profile?.tenant_id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('passengers')
-        .select('*')
-        .eq('tenant_id', profile.tenant_id)
-        .order('name');
-
-      if (error) throw error;
-      setPassengers(data || []);
-    } catch (error: any) {
-      console.error('Error fetching passengers:', error);
-      toast({
-        title: '錯誤',
-        description: '無法載入乘客資料',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
+    if (!client) {
+      return;
     }
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profile?.tenant_id) return;
-
-    try {
-      if (editingPassenger) {
-        const { error } = await supabase
-          .from('passengers')
-          .update(formData)
-          .eq('id', editingPassenger.id);
-
-        if (error) throw error;
-
-        toast({
-          title: '成功',
-          description: '乘客更新成功',
-        });
-      } else {
-        const { error } = await supabase.from('passengers').insert({
-          ...formData,
-          tenant_id: profile.tenant_id,
-        });
-
-        if (error) throw error;
-
-        toast({
-          title: '成功',
-          description: '乘客新增成功',
-        });
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const nextPassengers = await client.listPassengers();
+        if (!active) {
+          return;
+        }
+        setPassengers(nextPassengers);
+        setError(null);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(toErrorMessage(loadError));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
+    };
 
-      setDialogOpen(false);
-      setEditingPassenger(null);
-      setFormData({ name: '', phone: '', email: '', department: '', notes: '' });
-      fetchPassengers();
-    } catch (error: any) {
-      console.error('Error saving passenger:', error);
-      toast({
-        title: '錯誤',
-        description: error.message || '無法儲存乘客',
-        variant: 'destructive',
-      });
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client) {
+      return;
     }
-  };
 
-  const handleEdit = (passenger: Passenger) => {
-    setEditingPassenger(passenger);
-    setFormData({
-      name: passenger.name,
-      phone: passenger.phone,
-      email: passenger.email || '',
-      department: passenger.department || '',
-      notes: passenger.notes || '',
-    });
-    setDialogOpen(true);
-  };
-
-  const handleDelete = async (passengerId: string) => {
-    if (!confirm('確定要停用此乘客嗎？')) return;
-
+    setSaving(true);
     try {
-      const { error } = await supabase
-        .from('passengers')
-        .update({ is_active: false })
-        .eq('id', passengerId);
-
-      if (error) throw error;
-
-      toast({
-        title: '成功',
-        description: '乘客已成功停用',
-      });
-      fetchPassengers();
-    } catch (error: any) {
-      console.error('Error deactivating passenger:', error);
-      toast({
-        title: '錯誤',
-        description: '無法停用乘客',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleGenerateDemoData = async () => {
-    setGeneratingDemo(true);
-    try {
-      const { error } = await supabase.functions.invoke('seed-demo-data');
-
-      if (error) throw error;
-
-      toast({
-        title: '成功',
-        description: 'Demo 資料已建立',
-      });
-
-      fetchPassengers();
-    } catch (error: any) {
-      console.error('Error generating demo data:', error);
-      toast({
-        title: '錯誤',
-        description: error.message || '建立 Demo 資料失敗',
-        variant: 'destructive',
-      });
+      const command: UpsertTenantPassengerCommand = {
+        ...(form.passengerId ? { passengerId: form.passengerId } : {}),
+        fullName: form.fullName.trim(),
+        ...(form.employeeNo.trim() ? { employeeNo: form.employeeNo.trim() } : {}),
+        ...(form.departmentName.trim()
+          ? { departmentName: form.departmentName.trim() }
+          : {}),
+        ...(form.mobile.trim() ? { mobile: form.mobile.trim() } : {}),
+        ...(form.email.trim() ? { email: form.email.trim() } : {}),
+        activeFlag: form.activeFlag,
+      };
+      await client.upsertPassenger(command);
+      const refreshed = await client.listPassengers();
+      setPassengers(refreshed);
+      setForm(EMPTY_FORM);
+      toast.success(form.passengerId ? "Passenger updated." : "Passenger created.");
+    } catch (submitError) {
+      setError(toErrorMessage(submitError));
+      toast.error(toErrorMessage(submitError));
     } finally {
-      setGeneratingDemo(false);
+      setSaving(false);
     }
   };
 
-  if (!canManagePassengers) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto py-8">
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-center text-muted-foreground">
-                您沒有權限管理乘客。
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const handleDeactivate = async (passenger: TenantPassengerRecord) => {
+    if (!client) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await client.upsertPassenger({
+        passengerId: passenger.passengerId,
+        fullName: passenger.fullName,
+        employeeNo: passenger.employeeNo,
+        departmentName: passenger.departmentName,
+        mobile: passenger.mobile,
+        email: passenger.email,
+        activeFlag: false,
+      });
+      setPassengers(await client.listPassengers());
+      toast.success("Passenger deactivated.");
+    } catch (deactivateError) {
+      toast.error(toErrorMessage(deactivateError));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <DashboardLayout>
-      <div className="container mx-auto py-8">
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>乘客管理</CardTitle>
-                <p className="text-sm text-muted-foreground mt-2">
-                  管理公司內部的乘客資料
-                </p>
-              </div>
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingPassenger(null);
-                    setFormData({ name: '', phone: '', email: '', department: '', notes: '' });
-                  }}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    新增乘客
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>
-                      {editingPassenger ? '編輯乘客' : '新增乘客'}
-                    </DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                      <Label htmlFor="name">姓名 *</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="phone">電話 *</Label>
-                      <Input
-                        id="phone"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email">電子郵件</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="department">部門</Label>
-                      <Input
-                        id="department"
-                        value={formData.department}
-                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="notes">備註</Label>
-                      <Textarea
-                        id="notes"
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button type="submit">儲存</Button>
-                      <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                        取消
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8">載入中...</div>
-            ) : passengers.length === 0 ? (
-              <div className="text-center py-12">
-                <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">
-                  尚無乘客資料
-                </p>
-                <Button 
-                  variant="outline" 
-                  onClick={handleGenerateDemoData}
-                  disabled={generatingDemo}
-                >
-                  <Database className="mr-2 h-4 w-4" />
-                  {generatingDemo ? '產生中...' : '產生 Demo 資料'}
-                </Button>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>姓名</TableHead>
-                    <TableHead>電話</TableHead>
-                    <TableHead>電子郵件</TableHead>
-                    <TableHead>部門</TableHead>
-                    <TableHead>狀態</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {passengers.map((passenger) => (
-                    <TableRow key={passenger.id}>
-                      <TableCell>{passenger.name}</TableCell>
-                      <TableCell>{passenger.phone}</TableCell>
-                      <TableCell>{passenger.email || '-'}</TableCell>
-                      <TableCell>{passenger.department || '-'}</TableCell>
-                      <TableCell>{passenger.is_active ? '啟用' : '停用'}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(passenger)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          {passenger.is_active && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(passenger.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+    <Card>
+      <CardHeader>
+        <CardTitle>Passenger Directory</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void handleSubmit(event)}>
+          <div className="space-y-2">
+            <Label>Full name</Label>
+            <Input
+              value={form.fullName}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, fullName: event.target.value }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Employee No</Label>
+            <Input
+              value={form.employeeNo}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  employeeNo: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Department</Label>
+            <Input
+              value={form.departmentName}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  departmentName: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Mobile</Label>
+            <Input
+              value={form.mobile}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, mobile: event.target.value }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, email: event.target.value }))
+              }
+            />
+          </div>
+          <div className="flex items-end gap-3">
+            <Button type="submit" disabled={saving}>
+              {form.passengerId ? "Save Changes" : "Create Passenger"}
+            </Button>
+            {form.passengerId && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setForm(EMPTY_FORM)}
+              >
+                Cancel Edit
+              </Button>
             )}
-          </CardContent>
-        </Card>
-      </div>
-    </DashboardLayout>
+          </div>
+        </form>
+
+        {loading ? (
+          <div className="py-8 text-center text-muted-foreground">載入中...</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Employee No</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead>Mobile</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedPassengers.map((passenger) => (
+                <TableRow key={passenger.passengerId}>
+                  <TableCell>{passenger.fullName}</TableCell>
+                  <TableCell>{passenger.employeeNo ?? "—"}</TableCell>
+                  <TableCell>{passenger.departmentName ?? "—"}</TableCell>
+                  <TableCell>{passenger.mobile ?? "—"}</TableCell>
+                  <TableCell>{passenger.email ?? "—"}</TableCell>
+                  <TableCell>{passenger.activeFlag ? "Active" : "Inactive"}</TableCell>
+                  <TableCell>{formatDateTime(passenger.updatedAt)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <button
+                        className="text-primary hover:underline"
+                        type="button"
+                        onClick={() => setForm(toFormState(passenger))}
+                      >
+                        Edit
+                      </button>
+                      {passenger.activeFlag && (
+                        <button
+                          className="text-destructive hover:underline"
+                          type="button"
+                          onClick={() => void handleDeactivate(passenger)}
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

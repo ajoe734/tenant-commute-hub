@@ -1,230 +1,403 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { useUserRole, AppRole } from '@/hooks/useUserRole';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
-import { Shield, UserPlus, UserMinus, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import type {
+  CreateTenantUserCommand,
+  TenantRoleCatalogRecord,
+  TenantUserRoleRecord,
+  TenantUserRoleStatus,
+  UpdateTenantRoleCommand,
+} from "@drts/contracts";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
+import { formatDateTime, toErrorMessage } from "@/lib/formatting";
+import { roleCodeToLabel } from "@/lib/drtsApi";
+import { toast } from "sonner";
 
-interface UserWithRoles {
-  id: string;
-  full_name: string;
-  email: string;
-  roles: AppRole[];
+interface UserDraft {
+  roleCode: string;
+  status: TenantUserRoleStatus;
 }
 
+interface InviteFormState {
+  email: string;
+  displayName: string;
+  roleCode: string;
+}
+
+const STATUSES: TenantUserRoleStatus[] = ["invited", "active", "suspended"];
+
 export default function AdminPanel() {
-  const { profile } = useAuth();
-  const { isAdmin, loading: roleLoading } = useUserRole();
-  const [users, setUsers] = useState<UserWithRoles[]>([]);
+  const { client } = useAuth();
+  const { isAdmin } = useUserRole();
+  const [users, setUsers] = useState<TenantUserRoleRecord[]>([]);
+  const [roleCatalog, setRoleCatalog] = useState<TenantRoleCatalogRecord[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, UserDraft>>({});
+  const [inviteForm, setInviteForm] = useState<InviteFormState>({
+    email: "",
+    displayName: "",
+    roleCode: "",
+  });
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const roleLookup = useMemo(
+    () =>
+      new Map(
+        roleCatalog.map((role) => [role.roleCode, role.displayName]),
+      ),
+    [roleCatalog],
+  );
+
+  const assignableRoles = useMemo(() => {
+    const filtered = roleCatalog.filter((role) => role.assignable);
+    return filtered.length > 0 ? filtered : roleCatalog;
+  }, [roleCatalog]);
 
   useEffect(() => {
-    if (profile && isAdmin) {
-      fetchUsers();
-    }
-  }, [profile, isAdmin]);
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-
-      // Fetch all profiles in tenant
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .eq('tenant_id', profile!.tenant_id);
-
-      if (profilesError) throw profilesError;
-
-      // Fetch all roles for users in tenant
-      const { data: userRoles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role')
-        .eq('tenant_id', profile!.tenant_id);
-
-      if (rolesError) throw rolesError;
-
-      // Combine data
-      const usersWithRoles: UserWithRoles[] = profiles!.map(p => ({
-        id: p.id,
-        full_name: p.full_name,
-        email: p.email,
-        roles: userRoles!
-          .filter(r => r.user_id === p.id)
-          .map(r => r.role as AppRole)
-      }));
-
-      setUsers(usersWithRoles);
-    } catch (error: any) {
-      console.error('Error fetching users:', error);
-      toast.error('載入使用者失敗');
-    } finally {
+    if (!client || !isAdmin) {
       setLoading(false);
+      return;
     }
-  };
 
-  const addRole = async (userId: string, role: AppRole) => {
-    try {
-      setActionLoading(`${userId}-${role}-add`);
+    let active = true;
 
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: userId,
-          tenant_id: profile!.tenant_id,
-          role
-        });
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [nextUsers, nextRoleCatalog] = await Promise.all([
+          client.listTenantUsers(),
+          client.listTenantRoles(),
+        ]);
+        if (!active) {
+          return;
+        }
+        setUsers(nextUsers);
+        setRoleCatalog(nextRoleCatalog);
+        setDrafts(
+          Object.fromEntries(
+            nextUsers.map((user) => [
+              user.userId,
+              {
+                roleCode: user.roleCode,
+                status: user.status,
+              },
+            ]),
+          ),
+        );
+        setInviteForm((current) => ({
+          ...current,
+          roleCode: nextRoleCatalog[0]?.roleCode ?? current.roleCode,
+        }));
+        setError(null);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(toErrorMessage(loadError));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
 
-      if (error) throw error;
+    void load();
 
-      toast.success(`角色 ${role} 已成功新增`);
-      await fetchUsers();
-    } catch (error: any) {
-      console.error('Error adding role:', error);
-      toast.error(error.message || '新增角色失敗');
-    } finally {
-      setActionLoading(null);
+    return () => {
+      active = false;
+    };
+  }, [client, isAdmin]);
+
+  const refreshUsers = async () => {
+    if (!client) {
+      return;
     }
-  };
-
-  const removeRole = async (userId: string, role: AppRole) => {
-    try {
-      setActionLoading(`${userId}-${role}-remove`);
-
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId)
-        .eq('tenant_id', profile!.tenant_id)
-        .eq('role', role);
-
-      if (error) throw error;
-
-      toast.success(`角色 ${role} 已成功移除`);
-      await fetchUsers();
-    } catch (error: any) {
-      console.error('Error removing role:', error);
-      toast.error(error.message || '移除角色失敗');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  if (roleLoading || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+    const nextUsers = await client.listTenantUsers();
+    setUsers(nextUsers);
+    setDrafts(
+      Object.fromEntries(
+        nextUsers.map((user) => [
+          user.userId,
+          {
+            roleCode: user.roleCode,
+            status: user.status,
+          },
+        ]),
+      ),
     );
-  }
+  };
+
+  const handleInvite = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const command: CreateTenantUserCommand = {
+        email: inviteForm.email.trim(),
+        displayName: inviteForm.displayName.trim(),
+        roleCode: inviteForm.roleCode,
+      };
+      await client.createTenantUser(command);
+      await refreshUsers();
+      setInviteForm({
+        email: "",
+        displayName: "",
+        roleCode: assignableRoles[0]?.roleCode ?? "",
+      });
+      toast.success("Tenant user invited.");
+    } catch (inviteError) {
+      const message = toErrorMessage(inviteError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateUser = async (userId: string) => {
+    if (!client) {
+      return;
+    }
+
+    const draft = drafts[userId];
+    if (!draft) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const command: UpdateTenantRoleCommand = {
+        roleCode: draft.roleCode,
+        status: draft.status,
+      };
+      await client.updateTenantRole(userId, command);
+      await refreshUsers();
+      toast.success("Tenant user updated.");
+    } catch (updateError) {
+      const message = toErrorMessage(updateError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!isAdmin) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-muted-foreground">您沒有權限存取此頁面</p>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent className="py-10 text-center text-muted-foreground">
+          Tenant admin access is required to manage users and role assignments.
+        </CardContent>
+      </Card>
     );
   }
 
-  const availableRoles: AppRole[] = ['admin', 'manager', 'user', 'viewer'];
-
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Shield className="h-8 w-8" />
-          管理面板
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          管理使用者角色與權限
-        </p>
-      </div>
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>使用者與角色</CardTitle>
+          <CardTitle>Invite Tenant User</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>使用者</TableHead>
-                <TableHead>電子郵件</TableHead>
-                <TableHead>目前角色</TableHead>
-                <TableHead>新增角色</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map(user => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.full_name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2 flex-wrap">
-                      {user.roles.length === 0 ? (
-                        <Badge variant="outline">無角色</Badge>
-                      ) : (
-                        user.roles.map(role => (
-                          <Badge key={role} variant="secondary" className="flex items-center gap-1">
-                            {role}
-                            <button
-                              onClick={() => removeRole(user.id, role)}
-                              disabled={actionLoading === `${user.id}-${role}-remove`}
-                              className="ml-1 hover:text-destructive"
-                            >
-                              {actionLoading === `${user.id}-${role}-remove` ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <UserMinus className="h-3 w-3" />
-                              )}
-                            </button>
-                          </Badge>
-                        ))
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      onValueChange={(role) => addRole(user.id, role as AppRole)}
-                      disabled={actionLoading?.startsWith(user.id)}
-                    >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="選擇角色" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableRoles
-                          .filter(role => !user.roles.includes(role))
-                          .map(role => (
-                            <SelectItem key={role} value={role}>
-                              <div className="flex items-center gap-2">
-                                <UserPlus className="h-4 w-4" />
-                                {role}
-                              </div>
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
+          <form
+            className="grid gap-4 md:grid-cols-3"
+            onSubmit={(event) => void handleInvite(event)}
+          >
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={inviteForm.email}
+                onChange={(event) =>
+                  setInviteForm((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Display name</Label>
+              <Input
+                value={inviteForm.displayName}
+                onChange={(event) =>
+                  setInviteForm((current) => ({
+                    ...current,
+                    displayName: event.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select
+                value={inviteForm.roleCode}
+                onValueChange={(roleCode) =>
+                  setInviteForm((current) => ({ ...current, roleCode }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignableRoles.map((role) => (
+                    <SelectItem key={role.roleCode} value={role.roleCode}>
+                      {role.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="md:col-span-3">
+              <Button type="submit" disabled={saving || !inviteForm.roleCode}>
+                {saving ? "Inviting..." : "Invite user"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tenant Users</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="py-8 text-center text-muted-foreground">載入中...</div>
+          ) : users.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+              No tenant users are currently assigned.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Current Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Invited</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => {
+                  const draft = drafts[user.userId] ?? {
+                    roleCode: user.roleCode,
+                    status: user.status,
+                  };
+
+                  return (
+                    <TableRow key={user.userId}>
+                      <TableCell className="font-medium">
+                        {user.displayName}
+                      </TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        {roleLookup.get(user.roleCode) ??
+                          roleCodeToLabel(user.roleCode)}
+                      </TableCell>
+                      <TableCell>{user.status}</TableCell>
+                      <TableCell>{formatDateTime(user.invitedAt)}</TableCell>
+                      <TableCell>{formatDateTime(user.updatedAt)}</TableCell>
+                      <TableCell>
+                        <div className="flex min-w-[280px] items-center gap-2">
+                          <Select
+                            value={draft.roleCode}
+                            onValueChange={(roleCode) =>
+                              setDrafts((current) => ({
+                                ...current,
+                                [user.userId]: {
+                                  ...draft,
+                                  roleCode,
+                                },
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="w-[150px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {assignableRoles.map((role) => (
+                                <SelectItem
+                                  key={role.roleCode}
+                                  value={role.roleCode}
+                                >
+                                  {role.displayName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={draft.status}
+                            onValueChange={(status) =>
+                              setDrafts((current) => ({
+                                ...current,
+                                [user.userId]: {
+                                  ...draft,
+                                  status: status as TenantUserRoleStatus,
+                                },
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="w-[130px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STATUSES.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {status}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={saving}
+                            onClick={() => void handleUpdateUser(user.userId)}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
