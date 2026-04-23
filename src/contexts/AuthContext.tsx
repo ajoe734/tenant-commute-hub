@@ -9,10 +9,12 @@ import {
 import { ApiClient } from "@drts/api-client";
 import { useNavigate } from "react-router-dom";
 import {
+  DEFAULT_TENANT_ID,
   SESSION_STORAGE_KEY,
+  createPublicClient,
   createTenantPortalClient,
-  createTenantPortalSession,
-  toTenantPortalProfile,
+  normalizeTenantPortalSession,
+  toTenantPortalSession,
   type TenantPortalProfile,
   type TenantPortalSession,
 } from "@/lib/drtsApi";
@@ -32,7 +34,7 @@ interface AuthContextType {
     email: string;
     fullName?: string;
     roleCode?: string;
-  }) => Promise<{ error: Error | null }>;
+  }) => Promise<{ error: Error | null; session: TenantPortalSession | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -49,7 +51,9 @@ function readStoredSession(): TenantPortalSession | null {
   }
 
   try {
-    return createTenantPortalSession(JSON.parse(raw) as TenantPortalSession);
+    return normalizeTenantPortalSession(
+      JSON.parse(raw) as TenantPortalSession,
+    );
   } catch {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
     return null;
@@ -62,8 +66,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setSession(readStoredSession());
-    setLoading(false);
+    let active = true;
+
+    const restoreSession = async () => {
+      const storedSession = readStoredSession();
+      if (!storedSession) {
+        if (active) {
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const identity = await createTenantPortalClient(
+          storedSession,
+        ).getIdentityContext();
+        if (!active) {
+          return;
+        }
+        setSession({
+          ...storedSession,
+          identity,
+        });
+      } catch {
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+        if (active) {
+          setSession(null);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void restoreSession();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const client = useMemo(
@@ -71,11 +112,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [session],
   );
 
-  const profile = session ? toTenantPortalProfile(session) : null;
+  const profile = session?.profile ?? null;
   const user = session
     ? {
-        id: session.actorId,
-        email: session.email,
+        id: session.profile.id,
+        email: session.profile.email,
       }
     : null;
 
@@ -85,24 +126,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roleCode?: string;
   }) => {
     try {
-      const nextSession = createTenantPortalSession({
+      const issuedSession = await createPublicClient().createTenantBootstrapSession({
         email: input.email,
         fullName: input.fullName,
         roleCode: input.roleCode,
+        tenantId: DEFAULT_TENANT_ID,
       });
+      const nextSession = toTenantPortalSession(issuedSession);
       window.localStorage.setItem(
         SESSION_STORAGE_KEY,
         JSON.stringify(nextSession),
       );
       setSession(nextSession);
       navigate("/");
-      return { error: null };
+      return { error: null, session: nextSession };
     } catch (error) {
       return {
         error:
           error instanceof Error
             ? error
-            : new Error("Unable to establish bootstrap tenant session."),
+            : new Error("Unable to establish tenant portal session."),
+        session: null,
       };
     }
   };

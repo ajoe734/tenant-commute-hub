@@ -1,12 +1,5 @@
 import { ApiClient } from "@drts/api-client";
-
-export interface TenantPortalSession {
-  actorId: string;
-  tenantId: string;
-  email: string;
-  fullName: string;
-  roleCode: string;
-}
+import type { IdentityContext, TenantBootstrapSession as IssuedTenantBootstrapSession } from "@drts/contracts";
 
 export interface TenantPortalProfile {
   id: string;
@@ -16,15 +9,22 @@ export interface TenantPortalProfile {
   role_code: string;
 }
 
+export interface TenantPortalSession {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresIn: string;
+  profile: TenantPortalProfile;
+  identity: IdentityContext;
+}
+
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 export const DEFAULT_TENANT_ID =
   import.meta.env.VITE_TENANT_ID ?? "tenant-demo-001";
-export const SESSION_STORAGE_KEY = "drts-tenant-portal-session";
-
-const DEFAULT_BOOTSTRAP_EMAIL =
+export const DEFAULT_BOOTSTRAP_EMAIL =
   import.meta.env.VITE_BOOTSTRAP_EMAIL ?? "tenant.admin@example.com";
-const DEFAULT_BOOTSTRAP_NAME =
+export const DEFAULT_BOOTSTRAP_NAME =
   import.meta.env.VITE_BOOTSTRAP_NAME ?? "Tenant Admin";
+export const SESSION_STORAGE_KEY = "drts-tenant-portal-session";
 
 export function roleCodeToLabel(roleCode: string): string {
   switch (roleCode) {
@@ -41,81 +41,76 @@ export function roleCodeToLabel(roleCode: string): string {
   }
 }
 
-export function deriveRoleCode(
-  email: string,
-  requestedRoleCode?: string,
-): string {
-  if (requestedRoleCode) {
-    return requestedRoleCode;
+export function normalizeTenantPortalSession(
+  input: TenantPortalSession,
+): TenantPortalSession {
+  const accessToken = input.accessToken?.trim();
+  const tokenType = input.tokenType?.trim() as "Bearer" | "";
+  const expiresIn = input.expiresIn?.trim();
+  const profile = input.profile;
+  const identity = input.identity;
+
+  if (!accessToken || !tokenType || !expiresIn || !profile || !identity) {
+    throw new Error("Invalid tenant portal session payload.");
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
-  if (normalizedEmail.startsWith("viewer")) {
-    return "tenant_viewer";
+  if (
+    !profile.id?.trim() ||
+    !profile.tenant_id?.trim() ||
+    !profile.full_name?.trim() ||
+    !profile.email?.trim() ||
+    !profile.role_code?.trim()
+  ) {
+    throw new Error("Invalid tenant portal profile payload.");
   }
-  if (normalizedEmail.startsWith("finance")) {
-    return "tenant_finance_admin";
-  }
-  if (normalizedEmail.startsWith("ops")) {
-    return "tenant_ops_admin";
-  }
-  return "tenant_admin";
-}
-
-export function createTenantPortalSession(input?: {
-  actorId?: string;
-  tenantId?: string;
-  email?: string;
-  fullName?: string;
-  roleCode?: string;
-}): TenantPortalSession {
-  const email = input?.email?.trim() || DEFAULT_BOOTSTRAP_EMAIL;
-  const fullName = input?.fullName?.trim() || DEFAULT_BOOTSTRAP_NAME;
-  const roleCode = deriveRoleCode(email, input?.roleCode);
-  const actorId =
-    input?.actorId?.trim() ||
-    email
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") ||
-    "tenant-portal-user";
 
   return {
-    actorId,
-    tenantId: input?.tenantId?.trim() || DEFAULT_TENANT_ID,
-    email,
-    fullName,
-    roleCode,
+    accessToken,
+    tokenType,
+    expiresIn,
+    profile: {
+      id: profile.id.trim(),
+      tenant_id: profile.tenant_id.trim(),
+      full_name: profile.full_name.trim(),
+      email: profile.email.trim().toLowerCase(),
+      role_code: profile.role_code.trim(),
+    },
+    identity,
   };
 }
 
-export function toTenantPortalProfile(
-  session: TenantPortalSession,
-): TenantPortalProfile {
-  return {
-    id: session.actorId,
-    tenant_id: session.tenantId,
-    full_name: session.fullName,
-    email: session.email,
-    role_code: session.roleCode,
-  };
+export function toTenantPortalSession(
+  session: IssuedTenantBootstrapSession,
+): TenantPortalSession {
+  return normalizeTenantPortalSession({
+    accessToken: session.accessToken,
+    tokenType: session.tokenType,
+    expiresIn: session.expiresIn,
+    profile: {
+      id: session.profile.id,
+      tenant_id: session.profile.tenantId,
+      full_name: session.profile.fullName,
+      email: session.profile.email,
+      role_code: session.profile.roleCode,
+    },
+    identity: session.identity,
+  });
+}
+
+export function createPublicClient(): ApiClient {
+  return new ApiClient({
+    baseUrl: API_URL,
+  });
 }
 
 export function createTenantPortalClient(
-  session: TenantPortalSession,
+  session: Pick<TenantPortalSession, "accessToken" | "profile">,
 ): ApiClient {
   return new ApiClient({
     baseUrl: API_URL,
     defaultHeaders: {
-      "x-actor-type": "tenant_admin",
-      "x-actor-id": session.actorId,
-      "x-realm": "tenant",
-      "x-tenant-id": session.tenantId,
-      "x-roles": session.roleCode,
+      Authorization: `Bearer ${session.accessToken}`,
+      "x-tenant-id": session.profile.tenant_id,
     },
   });
-}
-
-export function createBootstrapTenantClient(): ApiClient {
-  return createTenantPortalClient(createTenantPortalSession());
 }

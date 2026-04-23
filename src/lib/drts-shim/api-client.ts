@@ -2,6 +2,7 @@ import type {
   ApiSuccessEnvelope,
   AuditLogRecord,
   BookingRecord,
+  CreateTenantBootstrapSessionCommand,
   CreateReportJobCommand,
   CreateTenantBookingCommand,
   CreateTenantUserCommand,
@@ -12,6 +13,7 @@ import type {
   TenantAddressRecord,
   TenantApiKeyRecord,
   TenantBillingProfile,
+  TenantBootstrapSession,
   TenantInvoiceRecord,
   TenantNotificationPreferences,
   TenantPassengerRecord,
@@ -170,6 +172,14 @@ export class ApiClient {
 
   async getIdentityContext() {
     return this.get("/api/identity/context");
+  }
+
+  async createTenantBootstrapSession(
+    command: CreateTenantBootstrapSessionCommand,
+  ): Promise<TenantBootstrapSession> {
+    return this.post<TenantBootstrapSession>("/api/auth/tenant/bootstrap-session", {
+      body: command,
+    });
   }
 
   async createTenantBooking(command: CreateTenantBookingCommand) {
