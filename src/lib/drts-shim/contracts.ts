@@ -37,6 +37,23 @@ export interface ApiSuccessEnvelope<T> {
   };
 }
 
+export interface IdentityContext extends LooseRecord {
+  actorType:
+    | "system"
+    | "platform_admin"
+    | "tenant_admin"
+    | "ops_user"
+    | "driver_user";
+  actorId: string | null;
+  realm: "system" | "platform" | "tenant" | "ops" | "driver";
+  authMode: "bootstrap_headers" | "jwt_bearer";
+  roleFamilies: Array<"platform" | "tenant" | "ops" | "driver">;
+  roles: string[];
+  scopes: string[];
+  tenantId: string | null;
+  supportedExecutionModes: string[];
+}
+
 export interface AuditLogRecord extends LooseRecord {
   auditId?: string;
   createdAt?: string | null;
@@ -67,6 +84,13 @@ export interface CreateTenantBookingCommand extends LooseRecord {
   passengerId?: string;
   pickupAddressId?: string;
   dropoffAddressId?: string;
+}
+
+export interface CreateTenantBootstrapSessionCommand extends LooseRecord {
+  email: string;
+  fullName?: string;
+  roleCode?: string;
+  tenantId?: string;
 }
 
 export interface CreateTenantUserCommand extends LooseRecord {
@@ -134,6 +158,22 @@ export interface TenantBillingProfile extends LooseRecord {
   billingEmail?: string | null;
   invoicingDayOfMonth?: number | null;
   updatedAt?: string | null;
+}
+
+export interface TenantPortalProfile extends LooseRecord {
+  id: string;
+  tenantId: string;
+  fullName: string;
+  email: string;
+  roleCode: string;
+}
+
+export interface TenantBootstrapSession extends LooseRecord {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresIn: string;
+  profile: TenantPortalProfile;
+  identity: IdentityContext;
 }
 
 export interface TenantInvoiceRecord extends LooseRecord {

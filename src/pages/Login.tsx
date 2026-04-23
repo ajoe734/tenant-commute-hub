@@ -14,7 +14,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
-import { createBootstrapTenantClient, roleCodeToLabel } from "@/lib/drtsApi";
+import {
+  DEFAULT_BOOTSTRAP_EMAIL,
+  DEFAULT_BOOTSTRAP_NAME,
+  createPublicClient,
+  roleCodeToLabel,
+} from "@/lib/drtsApi";
 import { toast } from "sonner";
 
 const FALLBACK_ROLES: TenantRoleCatalogRecord[] = [
@@ -51,8 +56,8 @@ const Login = () => {
     useState<TenantRoleCatalogRecord[]>(FALLBACK_ROLES);
   const [roleCatalogError, setRoleCatalogError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    fullName: "Tenant Admin",
-    email: "tenant.admin@example.com",
+    fullName: DEFAULT_BOOTSTRAP_NAME,
+    email: DEFAULT_BOOTSTRAP_EMAIL,
     roleCode: "tenant_admin",
   });
 
@@ -61,8 +66,7 @@ const Login = () => {
       return;
     }
 
-    const client = createBootstrapTenantClient();
-    client
+    createPublicClient()
       .listTenantRoles()
       .then((roles) => {
         if (roles.length > 0) {
@@ -86,7 +90,7 @@ const Login = () => {
     event.preventDefault();
     setLoading(true);
 
-    const { error } = await signIn({
+    const { error, session } = await signIn({
       email: form.email,
       fullName: form.fullName,
       roleCode: form.roleCode,
@@ -95,7 +99,11 @@ const Login = () => {
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success(`Signed in as ${roleCodeToLabel(form.roleCode)}.`);
+      toast.success(
+        `Signed in as ${roleCodeToLabel(
+          session?.profile.role_code ?? form.roleCode,
+        )}.`,
+      );
     }
 
     setLoading(false);
@@ -116,7 +124,9 @@ const Login = () => {
           <CardHeader>
             <CardTitle>Bootstrap Access</CardTitle>
             <CardDescription>
-              此入口不再使用 Supabase auth。登入只建立本地 bootstrap session，所有資料與 authority 都走 `drts-fleet-platform` tenant BFF。
+              此入口不再使用 Supabase auth。登入會向 `drts-fleet-platform`
+              申請 server-issued bearer session，所有資料與 authority 都走
+              tenant BFF。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -124,7 +134,8 @@ const Login = () => {
               <Shield className="h-4 w-4" />
               <AlertTitle>Authority boundary</AlertTitle>
               <AlertDescription>
-                角色選單由 `/api/tenant/roles` 載入；若該端點失敗，才會使用本地 fallback。
+                角色選單由 public `GET /api/tenant/roles` 載入；送出登入後，
+                actor / role / tenant context 由 backend 簽回，而不是由前端本地拼接。
               </AlertDescription>
             </Alert>
 
