@@ -1,636 +1,601 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { toast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { DollarSign, MapPin, Clock, User, Car, HelpCircle, Info } from 'lucide-react';
-import MapPicker from '@/components/MapPicker';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type {
+  CreateTenantBookingCommand,
+  TenantAddressRecord,
+  TenantPassengerRecord,
+} from "@drts/contracts";
+import { BUSINESS_DISPATCH_SUBTYPES } from "@drts/contracts";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/contexts/AuthContext";
+import { toDatetimeLocalValue, toErrorMessage } from "@/lib/formatting";
+import { toast } from "sonner";
 
-const bookingSchema = z.object({
-  passenger_id: z.string().min(1, '請選擇乘客'),
-  trip_type: z.enum(['one_way', 'round_trip']),
-  preferred_vehicle_type: z.enum(['human_driver', 'autonomous', 'no_preference']).default('no_preference'),
-  pickup_address: z.string().min(1, '上車地址為必填'),
-  pickup_address_id: z.string().optional(),
-  pickup_latitude: z.number(),
-  pickup_longitude: z.number(),
-  dropoff_address: z.string().min(1, '下車地址為必填'),
-  dropoff_address_id: z.string().optional(),
-  dropoff_latitude: z.number(),
-  dropoff_longitude: z.number(),
-  scheduled_time: z.string().min(1, '預約時間為必填'),
-  notes: z.string().optional(),
-  is_recurring: z.boolean().default(false),
-  recurrence_frequency: z.enum(['daily', 'weekly', 'monthly']).optional(),
-  recurrence_end_date: z.string().optional(),
-});
-
-type BookingFormData = z.infer<typeof bookingSchema>;
-
-interface Address {
-  id: string;
-  name: string;
-  address: string;
-  latitude: number;
-  longitude: number;
+interface BookingFormState {
+  passengerId: string;
+  businessDispatchSubtype: CreateTenantBookingCommand["businessDispatchSubtype"];
+  pickupAddressId: string;
+  pickupAddress: string;
+  dropoffAddressId: string;
+  dropoffAddress: string;
+  reservationWindowStart: string;
+  reservationWindowEnd: string;
+  bookedByName: string;
+  bookedByEmail: string;
+  onsiteContactName: string;
+  onsiteContactPhone: string;
+  costCenter: string;
+  vehiclePreference: string;
+  direction: "pickup" | "dropoff";
+  flightNo: string;
+  terminal: string;
+  luggageCount: string;
+  notes: string;
+  signoffRequired: boolean;
+  expenseProofRequired: boolean;
 }
 
-interface PriceEstimate {
-  distance_km: number;
-  estimated_cost: number;
-  estimated_duration_minutes: number;
+function defaultForm(): BookingFormState {
+  const start = new Date();
+  start.setHours(start.getHours() + 1, 0, 0, 0);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+  return {
+    passengerId: "",
+    businessDispatchSubtype: "enterprise_dispatch",
+    pickupAddressId: "",
+    pickupAddress: "",
+    dropoffAddressId: "",
+    dropoffAddress: "",
+    reservationWindowStart: toDatetimeLocalValue(start.toISOString()),
+    reservationWindowEnd: toDatetimeLocalValue(end.toISOString()),
+    bookedByName: "",
+    bookedByEmail: "",
+    onsiteContactName: "",
+    onsiteContactPhone: "",
+    costCenter: "",
+    vehiclePreference: "",
+    direction: "pickup",
+    flightNo: "",
+    terminal: "",
+    luggageCount: "",
+    notes: "",
+    signoffRequired: false,
+    expenseProofRequired: false,
+  };
 }
 
 export default function NewBooking() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [passengers, setPassengers] = useState<any[]>([]);
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [priceEstimate, setPriceEstimate] = useState<PriceEstimate | null>(null);
-  const [isCalculatingPrice, setIsCalculatingPrice] = useState(false);
-
-  const form = useForm<BookingFormData>({
-    resolver: zodResolver(bookingSchema),
-    defaultValues: {
-      trip_type: 'one_way',
-      is_recurring: false,
-      pickup_latitude: 25.0330,
-      pickup_longitude: 121.5654,
-      dropoff_latitude: 25.0330,
-      dropoff_longitude: 121.5654,
-    },
-  });
-
-  const isRecurring = form.watch('is_recurring');
-  const pickupLat = form.watch('pickup_latitude');
-  const pickupLng = form.watch('pickup_longitude');
-  const dropoffLat = form.watch('dropoff_latitude');
-  const dropoffLng = form.watch('dropoff_longitude');
-  const tripType = form.watch('trip_type');
-  const preferredVehicleType = form.watch('preferred_vehicle_type');
+  const { client } = useAuth();
+  const [passengers, setPassengers] = useState<TenantPassengerRecord[]>([]);
+  const [addresses, setAddresses] = useState<TenantAddressRecord[]>([]);
+  const [form, setForm] = useState<BookingFormState>(defaultForm);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!profile?.tenant_id) return;
-      
-      // Fetch passengers
-      const { data: passengersData, error: passengersError } = await supabase
-        .from('passengers')
-        .select('*')
-        .eq('tenant_id', profile.tenant_id)
-        .eq('is_active', true)
-        .order('name');
-
-      if (passengersError) {
-        console.error('Error fetching passengers:', passengersError);
-      } else {
-        setPassengers(passengersData || []);
-      }
-
-      // Fetch addresses
-      const { data: addressesData, error: addressesError } = await supabase
-        .from('addresses')
-        .select('*')
-        .eq('tenant_id', profile.tenant_id)
-        .order('name');
-
-      if (addressesError) {
-        console.error('Error fetching addresses:', addressesError);
-      } else {
-        setAddresses(addressesData || []);
-      }
-    };
-
-    fetchData();
-  }, [profile]);
-
-  // Auto-calculate price when coordinates or trip type change
-  useEffect(() => {
-    const calculatePrice = async () => {
-      if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng || !tripType) return;
-      
-      setIsCalculatingPrice(true);
-      try {
-        const { data, error } = await supabase.functions.invoke('calculate-price', {
-          body: {
-            pickup_lat: pickupLat,
-            pickup_lng: pickupLng,
-            dropoff_lat: dropoffLat,
-            dropoff_lng: dropoffLng,
-            trip_type: tripType,
-            preferred_vehicle_type: preferredVehicleType,
-          },
-        });
-
-        if (error) throw error;
-        if (data?.success) {
-          setPriceEstimate({
-            distance_km: data.distance_km,
-            estimated_cost: data.estimated_cost,
-            estimated_duration_minutes: data.estimated_duration_minutes,
-          });
-        }
-      } catch (error) {
-        console.error('Error calculating price:', error);
-        setPriceEstimate(null);
-      } finally {
-        setIsCalculatingPrice(false);
-      }
-    };
-
-    const debounce = setTimeout(calculatePrice, 500);
-    return () => clearTimeout(debounce);
-  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, tripType, preferredVehicleType]);
-
-  const handleSelectAddress = (type: 'pickup' | 'dropoff', address: Address) => {
-    if (type === 'pickup') {
-      form.setValue('pickup_address', address.address);
-      form.setValue('pickup_address_id', address.id);
-      form.setValue('pickup_latitude', address.latitude);
-      form.setValue('pickup_longitude', address.longitude);
-    } else {
-      form.setValue('dropoff_address', address.address);
-      form.setValue('dropoff_address_id', address.id);
-      form.setValue('dropoff_latitude', address.latitude);
-      form.setValue('dropoff_longitude', address.longitude);
-    }
-  };
-
-  const onSubmit = async (data: BookingFormData) => {
-    if (!user || !profile) {
-      toast({
-        title: '錯誤',
-        description: '請先登入',
-        variant: 'destructive',
-      });
+    if (!client) {
       return;
     }
 
-    // Autonomous vehicle confirmation
-    if (data.preferred_vehicle_type === 'autonomous') {
-      const confirmed = window.confirm(
-        '您選擇了自駕車服務。\n\n' +
-        '請注意：若路線不適合自駕車（如山區、工地、特殊限制區域），' +
-        '系統可能改派人類司機，但仍會保留優惠折扣。\n\n' +
-        '確定要繼續預約嗎？'
-      );
-      
-      if (!confirmed) return;
+    let active = true;
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [nextPassengers, nextAddresses] = await Promise.all([
+          client.listPassengers(),
+          client.listAddresses(),
+        ]);
+        if (!active) {
+          return;
+        }
+        setPassengers(nextPassengers.filter((passenger) => passenger.activeFlag));
+        setAddresses(nextAddresses.filter((address) => address.activeFlag));
+        setError(null);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(toErrorMessage(loadError));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const passengerLookup = useMemo(
+    () => new Map(passengers.map((passenger) => [passenger.passengerId, passenger])),
+    [passengers],
+  );
+  const addressLookup = useMemo(
+    () => new Map(addresses.map((address) => [address.addressId, address])),
+    [addresses],
+  );
+
+  const handleAddressChange = (
+    field: "pickupAddressId" | "dropoffAddressId",
+    value: string,
+  ) => {
+    const selected = addressLookup.get(value);
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === "pickupAddressId"
+        ? { pickupAddress: selected?.addressText ?? current.pickupAddress }
+        : { dropoffAddress: selected?.addressText ?? current.dropoffAddress }),
+    }));
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client) {
+      return;
     }
 
-    setIsSubmitting(true);
+    const passenger = passengerLookup.get(form.passengerId);
+    if (!passenger) {
+      setError("A valid passenger is required.");
+      return;
+    }
+    if (!form.pickupAddress.trim() || !form.dropoffAddress.trim()) {
+      setError("Pickup and dropoff addresses are required.");
+      return;
+    }
 
+    setSaving(true);
     try {
-      const bookingNumber = `BK${Date.now()}`;
-
-      const bookingData = {
-        tenant_id: profile.tenant_id,
-        booking_number: bookingNumber,
-        passenger_id: data.passenger_id,
-        trip_type: data.trip_type,
-        preferred_vehicle_type: data.preferred_vehicle_type,
-        pickup_address: data.pickup_address,
-        pickup_address_id: data.pickup_address_id || null,
-        pickup_latitude: data.pickup_latitude,
-        pickup_longitude: data.pickup_longitude,
-        dropoff_address: data.dropoff_address,
-        dropoff_address_id: data.dropoff_address_id || null,
-        dropoff_latitude: data.dropoff_latitude,
-        dropoff_longitude: data.dropoff_longitude,
-        scheduled_time: data.scheduled_time,
-        estimated_cost: priceEstimate?.estimated_cost || null,
-        estimated_duration_minutes: priceEstimate?.estimated_duration_minutes || null,
-        notes: data.notes,
-        is_recurring: data.is_recurring,
-        recurrence_frequency: data.is_recurring ? data.recurrence_frequency : null,
-        recurrence_end_date: data.is_recurring ? data.recurrence_end_date : null,
-        status: 'scheduled' as const,
-        created_by: user.id,
+      const command: CreateTenantBookingCommand = {
+        businessDispatchSubtype: form.businessDispatchSubtype,
+        pickup: {
+          address: form.pickupAddress.trim(),
+        },
+        dropoff: {
+          address: form.dropoffAddress.trim(),
+        },
+        reservationWindowStart: new Date(
+          form.reservationWindowStart,
+        ).toISOString(),
+        reservationWindowEnd: new Date(form.reservationWindowEnd).toISOString(),
+        passenger: {
+          name: passenger.fullName,
+          phone: passenger.mobile || passenger.email || "N/A",
+        },
+        ...(form.bookedByName.trim() && form.bookedByEmail.trim()
+          ? {
+              bookedBy: {
+                name: form.bookedByName.trim(),
+                email: form.bookedByEmail.trim(),
+              },
+            }
+          : {}),
+        ...(form.onsiteContactName.trim() && form.onsiteContactPhone.trim()
+          ? {
+              onsiteContact: {
+                name: form.onsiteContactName.trim(),
+                phone: form.onsiteContactPhone.trim(),
+              },
+            }
+          : {}),
+        ...(form.costCenter.trim() ? { costCenter: form.costCenter.trim() } : {}),
+        ...(form.vehiclePreference.trim()
+          ? { vehiclePreference: form.vehiclePreference.trim() }
+          : {}),
+        ...(form.direction ? { direction: form.direction } : {}),
+        ...(form.flightNo.trim() ? { flightNo: form.flightNo.trim() } : {}),
+        ...(form.terminal.trim() ? { terminal: form.terminal.trim() } : {}),
+        ...(form.luggageCount.trim()
+          ? { luggageCount: Number(form.luggageCount) }
+          : {}),
+        ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
+        signoffRequired: form.signoffRequired,
+        expenseProofRequired: form.expenseProofRequired,
       };
 
-      const { error } = await supabase.from('bookings').insert([bookingData]);
-
-      if (error) throw error;
-
-      toast({
-        title: '建立成功',
-        description: `預約已成功建立${data.preferred_vehicle_type === 'autonomous' ? '（已選擇自駕車優惠）' : ''}`,
-      });
-
-      navigate('/bookings');
-    } catch (error: any) {
-      console.error('Error creating booking:', error);
-      toast({
-        title: '建立失敗',
-        description: error.message || '無法建立預約',
-        variant: 'destructive',
-      });
+      await client.createTenantBooking(command);
+      toast.success("Booking created.");
+      navigate("/booking-list");
+    } catch (submitError) {
+      setError(toErrorMessage(submitError));
+      toast.error(toErrorMessage(submitError));
     } finally {
-      setIsSubmitting(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>新增預約</CardTitle>
-          <CardDescription>建立新的用車預約</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="passenger_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>乘客 *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="選擇乘客" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {passengers.map((passenger) => (
-                            <SelectItem key={passenger.id} value={passenger.id}>
-                              {passenger.name} - {passenger.phone}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+    <Card>
+      <CardHeader>
+        <CardTitle>Create Booking</CardTitle>
+        <CardDescription>
+          Booking truth now lives in `/api/tenant/bookings`. Price quotes and
+          dispatch lifecycle are no longer computed in repo B.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
-                <FormField
-                  control={form.control}
-                  name="trip_type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>趟次類型 *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="one_way">單程</SelectItem>
-                          <SelectItem value="round_trip">來回</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="preferred_vehicle_type"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>偏好用車類型 *</FormLabel>
-                    <FormControl>
-                      <RadioGroup
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        className="flex flex-col space-y-2"
+        {loading ? (
+          <div className="py-8 text-center text-muted-foreground">載入中...</div>
+        ) : (
+          <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Passenger</Label>
+                <Select
+                  value={form.passengerId}
+                  onValueChange={(passengerId) =>
+                    setForm((current) => ({ ...current, passengerId }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select passenger" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {passengers.map((passenger) => (
+                      <SelectItem
+                        key={passenger.passengerId}
+                        value={passenger.passengerId}
                       >
-                        <div className="flex items-center space-x-3 border rounded-lg p-3 hover:bg-accent transition-colors">
-                          <RadioGroupItem value="human_driver" id="human_driver" />
-                          <Label htmlFor="human_driver" className="flex-1 cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4" />
-                              <span className="font-medium">人類司機</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              由專業司機服務，適合需要協助搬運或特殊需求
-                            </p>
-                          </Label>
-                        </div>
-                        
-                        <div className="flex items-center space-x-3 border rounded-lg p-3 hover:bg-accent transition-colors">
-                          <RadioGroupItem value="autonomous" id="autonomous" />
-                          <Label htmlFor="autonomous" className="flex-1 cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              <Car className="h-4 w-4" />
-                              <span className="font-medium">自駕車</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              智能自動駕駛車輛，環保且可能享有折扣優惠
-                            </p>
-                          </Label>
-                        </div>
-                        
-                        <div className="flex items-center space-x-3 border rounded-lg p-3 hover:bg-accent transition-colors">
-                          <RadioGroupItem value="no_preference" id="no_preference" />
-                          <Label htmlFor="no_preference" className="flex-1 cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              <HelpCircle className="h-4 w-4" />
-                              <span className="font-medium">無偏好</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              系統自動分配最佳車輛類型
-                            </p>
-                          </Label>
-                        </div>
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                    
-                    {field.value === 'autonomous' && (
-                      <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900">
-                        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        <AlertDescription className="text-blue-800 dark:text-blue-300">
-                          自駕車服務可享 <strong>9折優惠</strong>。若您的路線不適合自駕車（如特殊地形、施工路段），系統可能改派人類司機。
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </FormItem>
-                )}
-              />
-
-              {/* Pickup Location */}
-              <Card className="border-primary/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <MapPin className="h-5 w-5 text-primary" />
-                    上車地點
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Tabs defaultValue="manual">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="saved">從地址簿選擇</TabsTrigger>
-                      <TabsTrigger value="manual">手動輸入</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="saved" className="space-y-2">
-                      <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
-                        {addresses.map((address) => (
-                          <Button
-                            key={address.id}
-                            type="button"
-                            variant="outline"
-                            className="justify-start text-left h-auto py-2"
-                            onClick={() => handleSelectAddress('pickup', address)}
-                          >
-                            <div>
-                              <div className="font-semibold">{address.name}</div>
-                              <div className="text-xs text-muted-foreground">{address.address}</div>
-                            </div>
-                          </Button>
-                        ))}
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="manual" className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="pickup_address"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>地址 *</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="輸入完整地址" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <div>
-                        <FormLabel>地圖選點</FormLabel>
-                        <MapPicker
-                          onLocationSelect={(lat, lng, address) => {
-                            form.setValue('pickup_latitude', lat);
-                            form.setValue('pickup_longitude', lng);
-                            form.setValue('pickup_address', address);
-                          }}
-                          initialLat={pickupLat}
-                          initialLng={pickupLng}
-                        />
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </CardContent>
-              </Card>
-
-              {/* Dropoff Location */}
-              <Card className="border-primary/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <MapPin className="h-5 w-5 text-destructive" />
-                    下車地點
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Tabs defaultValue="manual">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="saved">從地址簿選擇</TabsTrigger>
-                      <TabsTrigger value="manual">手動輸入</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="saved" className="space-y-2">
-                      <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
-                        {addresses.map((address) => (
-                          <Button
-                            key={address.id}
-                            type="button"
-                            variant="outline"
-                            className="justify-start text-left h-auto py-2"
-                            onClick={() => handleSelectAddress('dropoff', address)}
-                          >
-                            <div>
-                              <div className="font-semibold">{address.name}</div>
-                              <div className="text-xs text-muted-foreground">{address.address}</div>
-                            </div>
-                          </Button>
-                        ))}
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="manual" className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="dropoff_address"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>地址 *</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="輸入完整地址" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <div>
-                        <FormLabel>地圖選點</FormLabel>
-                        <MapPicker
-                          onLocationSelect={(lat, lng, address) => {
-                            form.setValue('dropoff_latitude', lat);
-                            form.setValue('dropoff_longitude', lng);
-                            form.setValue('dropoff_address', address);
-                          }}
-                          initialLat={dropoffLat}
-                          initialLng={dropoffLng}
-                        />
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </CardContent>
-              </Card>
-
-              {/* Price Estimate */}
-              {priceEstimate && (
-                <Card className="bg-gradient-primary/5 border-primary/20">
-                  <CardContent className="pt-6">
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1">
-                          <MapPin className="h-4 w-4" />
-                          <span className="text-sm">距離</span>
-                        </div>
-                        <div className="text-2xl font-bold text-primary">
-                          {priceEstimate.distance_km} km
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1">
-                          <DollarSign className="h-4 w-4" />
-                          <span className="text-sm">預估費用</span>
-                        </div>
-                        <div className="text-2xl font-bold text-primary">
-                          NT$ {priceEstimate.estimated_cost}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1">
-                          <Clock className="h-4 w-4" />
-                          <span className="text-sm">預估時間</span>
-                        </div>
-                        <div className="text-2xl font-bold text-primary">
-                          {priceEstimate.estimated_duration_minutes} 分鐘
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <FormField
-                control={form.control}
-                name="scheduled_time"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>預約時間 *</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="datetime-local" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="notes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>備註</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} placeholder="其他需求或備註" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="is_recurring"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <FormLabel>循環預約</FormLabel>
-                      <FormDescription>設定定期重複的預約</FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              {isRecurring && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="recurrence_frequency"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>頻率 *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="選擇頻率" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="daily">每日</SelectItem>
-                            <SelectItem value="weekly">每週</SelectItem>
-                            <SelectItem value="monthly">每月</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="recurrence_end_date"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>結束日期 *</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="date" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-
-              <div className="flex gap-4">
-                <Button type="submit" disabled={isSubmitting || isCalculatingPrice} className="bg-gradient-primary">
-                  {isSubmitting ? '建立中...' : '建立預約'}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => navigate('/bookings')}>
-                  取消
-                </Button>
+                        {passenger.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-    </div>
+              <div className="space-y-2">
+                <Label>Subtype</Label>
+                <Select
+                  value={form.businessDispatchSubtype}
+                  onValueChange={(businessDispatchSubtype) =>
+                    setForm((current) => ({
+                      ...current,
+                      businessDispatchSubtype:
+                        businessDispatchSubtype as CreateTenantBookingCommand["businessDispatchSubtype"],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BUSINESS_DISPATCH_SUBTYPES.map((subtype) => (
+                      <SelectItem key={subtype} value={subtype}>
+                        {subtype}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Pickup saved address</Label>
+                <Select
+                  value={form.pickupAddressId}
+                  onValueChange={(value) =>
+                    handleAddressChange("pickupAddressId", value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select pickup address" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {addresses.map((address) => (
+                      <SelectItem key={address.addressId} value={address.addressId}>
+                        {address.addressName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Textarea
+                  rows={3}
+                  value={form.pickupAddress}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      pickupAddress: event.target.value,
+                    }))
+                  }
+                  placeholder="Pickup address"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Dropoff saved address</Label>
+                <Select
+                  value={form.dropoffAddressId}
+                  onValueChange={(value) =>
+                    handleAddressChange("dropoffAddressId", value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select dropoff address" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {addresses.map((address) => (
+                      <SelectItem key={address.addressId} value={address.addressId}>
+                        {address.addressName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Textarea
+                  rows={3}
+                  value={form.dropoffAddress}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      dropoffAddress: event.target.value,
+                    }))
+                  }
+                  placeholder="Dropoff address"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Reservation window start</Label>
+                <Input
+                  type="datetime-local"
+                  value={form.reservationWindowStart}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      reservationWindowStart: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reservation window end</Label>
+                <Input
+                  type="datetime-local"
+                  value={form.reservationWindowEnd}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      reservationWindowEnd: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Booked by name</Label>
+                <Input
+                  value={form.bookedByName}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      bookedByName: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Booked by email</Label>
+                <Input
+                  type="email"
+                  value={form.bookedByEmail}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      bookedByEmail: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Onsite contact name</Label>
+                <Input
+                  value={form.onsiteContactName}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      onsiteContactName: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Onsite contact phone</Label>
+                <Input
+                  value={form.onsiteContactPhone}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      onsiteContactPhone: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Cost center</Label>
+                <Input
+                  value={form.costCenter}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      costCenter: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Vehicle preference</Label>
+                <Input
+                  value={form.vehiclePreference}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      vehiclePreference: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label>Direction</Label>
+                <Select
+                  value={form.direction}
+                  onValueChange={(direction) =>
+                    setForm((current) => ({
+                      ...current,
+                      direction: direction as "pickup" | "dropoff",
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pickup">pickup</SelectItem>
+                    <SelectItem value="dropoff">dropoff</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Flight No</Label>
+                <Input
+                  value={form.flightNo}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      flightNo: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Terminal</Label>
+                <Input
+                  value={form.terminal}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      terminal: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Luggage count</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.luggageCount}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      luggageCount: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  rows={3}
+                  value={form.notes}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      notes: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="signoff-required"
+                  checked={form.signoffRequired}
+                  onCheckedChange={(checked) =>
+                    setForm((current) => ({
+                      ...current,
+                      signoffRequired: checked === true,
+                    }))
+                  }
+                />
+                <Label htmlFor="signoff-required">Signoff required</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="expense-proof-required"
+                  checked={form.expenseProofRequired}
+                  onCheckedChange={(checked) =>
+                    setForm((current) => ({
+                      ...current,
+                      expenseProofRequired: checked === true,
+                    }))
+                  }
+                />
+                <Label htmlFor="expense-proof-required">
+                  Expense proof required
+                </Label>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={saving}>
+                {saving ? "Creating..." : "Create Booking"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate("/booking-list")}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        )}
+      </CardContent>
+    </Card>
   );
 }

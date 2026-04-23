@@ -1,126 +1,122 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { ApiClient } from "@drts/api-client";
+import { useNavigate } from "react-router-dom";
+import {
+  SESSION_STORAGE_KEY,
+  createTenantPortalClient,
+  createTenantPortalSession,
+  toTenantPortalProfile,
+  type TenantPortalProfile,
+  type TenantPortalSession,
+} from "@/lib/drtsApi";
 
-interface Profile {
+interface AuthUser {
   id: string;
-  tenant_id: string;
-  full_name: string;
   email: string;
-  phone?: string;
 }
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
-  profile: Profile | null;
+  user: AuthUser | null;
+  session: TenantPortalSession | null;
+  profile: TenantPortalProfile | null;
+  client: ApiClient | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, companyName?: string) => Promise<{ error: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (input: {
+    email: string;
+    fullName?: string;
+    roleCode?: string;
+  }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function readStoredSession(): TenantPortalSession | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return createTenantPortalSession(JSON.parse(raw) as TenantPortalSession);
+  } catch {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [session, setSession] = useState<TenantPortalSession | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Fetch profile when user logs in
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserProfile(session.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-        }
-      }
-    );
-
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserProfile(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    setSession(readStoredSession());
+    setLoading(false);
   }, []);
 
-  const fetchUserProfile = async (userId: string) => {
+  const client = useMemo(
+    () => (session ? createTenantPortalClient(session) : null),
+    [session],
+  );
+
+  const profile = session ? toTenantPortalProfile(session) : null;
+  const user = session
+    ? {
+        id: session.actorId,
+        email: session.email,
+      }
+    : null;
+
+  const signIn = async (input: {
+    email: string;
+    fullName?: string;
+    roleCode?: string;
+  }) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return;
-      }
-
-      setProfile(data);
+      const nextSession = createTenantPortalSession({
+        email: input.email,
+        fullName: input.fullName,
+        roleCode: input.roleCode,
+      });
+      window.localStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(nextSession),
+      );
+      setSession(nextSession);
+      navigate("/");
+      return { error: null };
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      return {
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Unable to establish bootstrap tenant session."),
+      };
     }
-  };
-
-  const signUp = async (email: string, password: string, fullName: string, companyName?: string) => {
-    const redirectUrl = `${window.location.origin}/dashboard`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-          company_name: companyName
-        }
-      }
-    });
-
-    return { error };
-  };
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (!error) {
-      navigate('/dashboard');
-    }
-
-    return { error };
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
     setSession(null);
-    setProfile(null);
-    navigate('/login');
+    navigate("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{ user, session, profile, client, loading, signIn, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -129,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

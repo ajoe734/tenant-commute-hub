@@ -1,44 +1,59 @@
-import { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { cn } from "@/lib/utils";
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Users, 
-  FileText, 
-  Key, 
-  CreditCard, 
-  Bell, 
-  Shield,
-  ClipboardList,
+import {
+  Bell,
   Building2,
+  Calendar,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  Key,
+  LayoutDashboard,
   LogOut,
-  MapPin
+  MapPin,
+  Plus,
+  Shield,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { roleCodeToLabel } from "@/lib/drtsApi";
+import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
 const navigation = [
-  { name: "儀表板", href: "/dashboard", icon: LayoutDashboard },
-  { name: "預約管理", href: "/bookings", icon: Calendar },
+  { name: "儀表板", href: "/", icon: LayoutDashboard },
+  { name: "預約清單", href: "/booking-list", icon: Calendar },
+  { name: "建立預約", href: "/bookings/new", icon: Plus },
   { name: "乘客管理", href: "/passengers", icon: Users },
   { name: "地址簿", href: "/addresses", icon: MapPin },
-  { name: "成本中心", href: "/cost-centers", icon: Building2 },
   { name: "報表下載", href: "/reports", icon: FileText },
-  { name: "API & Webhook", href: "/api-keys", icon: Key },
+  { name: "API Keys", href: "/api-keys", icon: Key },
+  { name: "Webhooks", href: "/webhooks", icon: Bell },
   { name: "付款發票", href: "/billing", icon: CreditCard },
   { name: "通知設定", href: "/notifications", icon: Bell },
-  { name: "管理員", href: "/admin", icon: Shield },
+  { name: "SLA 設定", href: "/sla", icon: Building2 },
+  { name: "使用者", href: "/users", icon: Shield },
   { name: "審計軌跡", href: "/audit", icon: ClipboardList },
 ];
+
+function isRouteActive(pathname: string, href: string): boolean {
+  if (href === "/") {
+    return pathname === "/";
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
   const { signOut, profile } = useAuth();
+  const activeItem =
+    navigation.find((item) => isRouteActive(location.pathname, item.href)) ??
+    null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -49,13 +64,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
           </div>
           <div>
             <h2 className="font-semibold text-foreground">租戶入口</h2>
-            <p className="text-xs text-muted-foreground">企業版</p>
+            <p className="text-xs text-muted-foreground">BFF Consumer</p>
           </div>
         </div>
 
         <nav className="flex-1 space-y-1 p-4">
           {navigation.map((item) => {
-            const isActive = location.pathname === item.href;
+            const isActive = isRouteActive(location.pathname, item.href);
             return (
               <Link
                 key={item.name}
@@ -64,7 +79,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all",
                   isActive
                     ? "bg-primary/10 text-primary shadow-sm"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -90,19 +105,20 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-6">
           <div className="flex flex-1 items-center justify-between">
             <h1 className="text-xl font-semibold text-foreground">
-              {navigation.find(item => item.href === location.pathname)?.name || "儀表板"}
+              {activeItem?.name || "儀表板"}
             </h1>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
-                {profile?.full_name || profile?.email || "載入中..."}
-              </span>
+            <div className="text-right">
+              <div className="text-sm text-foreground">
+                {profile?.full_name || profile?.email || "Bootstrap Session"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {roleCodeToLabel(profile?.role_code ?? "tenant_admin")}
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="p-6">
-          {children}
-        </main>
+        <main className="p-6">{children}</main>
       </div>
     </div>
   );

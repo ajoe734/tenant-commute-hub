@@ -1,12 +1,19 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  TenantAddressRecord,
+  UpsertTenantAddressCommand,
+} from "@drts/contracts";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, Plus, Pencil, Trash2, Tag, Database } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -15,443 +22,306 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import MapPicker from "@/components/MapPicker";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/contexts/AuthContext";
+import { formatDateTime, splitCommaSeparated, toErrorMessage } from "@/lib/formatting";
+import { toast } from "sonner";
 
-interface Address {
-  id: string;
-  name: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-  tags: string[] | null;
-  visible_to_roles: string[] | null;
-  created_at: string;
+interface AddressFormState {
+  addressId?: string;
+  addressName: string;
+  addressText: string;
+  lat: string;
+  lng: string;
+  tags: string;
+  ownerPassengerId: string;
+  activeFlag: boolean;
 }
 
-const AddressManagement = () => {
-  const { profile } = useAuth();
-  const { toast } = useToast();
-  const [addresses, setAddresses] = useState<Address[]>([]);
+const EMPTY_FORM: AddressFormState = {
+  addressName: "",
+  addressText: "",
+  lat: "",
+  lng: "",
+  tags: "",
+  ownerPassengerId: "",
+  activeFlag: true,
+};
+
+function toFormState(address: TenantAddressRecord): AddressFormState {
+  return {
+    addressId: address.addressId,
+    addressName: address.addressName,
+    addressText: address.addressText,
+    lat: address.lat != null ? String(address.lat) : "",
+    lng: address.lng != null ? String(address.lng) : "",
+    tags: address.tags.join(", "),
+    ownerPassengerId: address.ownerPassengerId ?? "",
+    activeFlag: address.activeFlag,
+  };
+}
+
+export default function AddressManagement() {
+  const { client } = useAuth();
+  const [addresses, setAddresses] = useState<TenantAddressRecord[]>([]);
+  const [form, setForm] = useState<AddressFormState>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingAddress, setEditingAddress] = useState<Address | null>(null);
-  const [generatingDemo, setGeneratingDemo] = useState(false);
-  
-  const [formData, setFormData] = useState<{
-    name: string;
-    address: string;
-    latitude: number;
-    longitude: number;
-    tags: string[];
-    visible_to_roles: ("admin" | "manager" | "user" | "viewer")[];
-  }>({
-    name: "",
-    address: "",
-    latitude: 25.0330,
-    longitude: 121.5654,
-    tags: [],
-    visible_to_roles: ["admin", "manager", "user"],
-  });
-  
-  const [newTag, setNewTag] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const sortedAddresses = useMemo(
+    () =>
+      [...addresses].sort((left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt),
+      ),
+    [addresses],
+  );
 
   useEffect(() => {
-    fetchAddresses();
-  }, [profile]);
-
-  const fetchAddresses = async () => {
-    if (!profile?.tenant_id) return;
-    
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("addresses")
-      .select("*")
-      .eq("tenant_id", profile.tenant_id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching addresses:", error);
-      toast({
-        title: "載入失敗",
-        description: "無法載入地址資料",
-        variant: "destructive",
-      });
-    } else {
-      setAddresses(data || []);
-    }
-    setLoading(false);
-  };
-
-  const handleOpenDialog = (address?: Address) => {
-    if (address) {
-      setEditingAddress(address);
-      setFormData({
-        name: address.name,
-        address: address.address,
-        latitude: address.latitude,
-        longitude: address.longitude,
-        tags: address.tags || [],
-        visible_to_roles: (address.visible_to_roles || ["admin", "manager", "user"]) as ("admin" | "manager" | "user" | "viewer")[],
-      });
-    } else {
-      setEditingAddress(null);
-      setFormData({
-        name: "",
-        address: "",
-        latitude: 25.0330,
-        longitude: 121.5654,
-        tags: [],
-        visible_to_roles: ["admin", "manager", "user"],
-      });
-    }
-    setDialogOpen(true);
-  };
-
-  const handleSaveAddress = async () => {
-    if (!profile?.tenant_id || !formData.name || !formData.address) {
-      toast({
-        title: "驗證失敗",
-        description: "請填寫所有必填欄位",
-        variant: "destructive",
-      });
+    if (!client) {
       return;
     }
 
-    const addressData = {
-      tenant_id: profile.tenant_id,
-      name: formData.name,
-      address: formData.address,
-      latitude: formData.latitude,
-      longitude: formData.longitude,
-      tags: formData.tags.length > 0 ? formData.tags : null,
-      visible_to_roles: formData.visible_to_roles,
-      created_by: profile.id,
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const nextAddresses = await client.listAddresses();
+        if (!active) {
+          return;
+        }
+        setAddresses(nextAddresses);
+        setError(null);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(toErrorMessage(loadError));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
     };
 
-    if (editingAddress) {
-      const { error } = await supabase
-        .from("addresses")
-        .update(addressData)
-        .eq("id", editingAddress.id);
+    void load();
 
-      if (error) {
-        toast({
-          title: "更新失敗",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "地址已更新" });
-        setDialogOpen(false);
-        fetchAddresses();
-      }
-    } else {
-      const { error } = await supabase
-        .from("addresses")
-        .insert([addressData]);
+    return () => {
+      active = false;
+    };
+  }, [client]);
 
-      if (error) {
-        toast({
-          title: "新增失敗",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "地址已新增" });
-        setDialogOpen(false);
-        fetchAddresses();
-      }
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client) {
+      return;
     }
-  };
 
-  const handleDeleteAddress = async (id: string) => {
-    if (!confirm("確定要刪除此地址嗎？")) return;
-
-    const { error } = await supabase
-      .from("addresses")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      toast({
-        title: "刪除失敗",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      toast({ title: "地址已刪除" });
-      fetchAddresses();
-    }
-  };
-
-  const handleAddTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
-      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
-      setNewTag("");
-    }
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    setFormData({ ...formData, tags: formData.tags.filter(t => t !== tag) });
-  };
-
-  const handleLocationSelect = (lat: number, lng: number, address: string) => {
-    setFormData({ 
-      ...formData, 
-      latitude: lat, 
-      longitude: lng,
-      address: address 
-    });
-  };
-
-  const handleGenerateDemoData = async () => {
-    setGeneratingDemo(true);
+    setSaving(true);
     try {
-      const { error } = await supabase.functions.invoke('seed-demo-data');
+      const command: UpsertTenantAddressCommand = {
+        ...(form.addressId ? { addressId: form.addressId } : {}),
+        addressName: form.addressName.trim(),
+        addressText: form.addressText.trim(),
+        ...(form.lat.trim() ? { lat: Number(form.lat) } : {}),
+        ...(form.lng.trim() ? { lng: Number(form.lng) } : {}),
+        ...(form.ownerPassengerId.trim()
+          ? { ownerPassengerId: form.ownerPassengerId.trim() }
+          : {}),
+        tags: splitCommaSeparated(form.tags),
+        activeFlag: form.activeFlag,
+      };
 
-      if (error) throw error;
-
-      toast({
-        title: '成功',
-        description: 'Demo 資料已建立',
-      });
-
-      fetchAddresses();
-    } catch (error: any) {
-      console.error('Error generating demo data:', error);
-      toast({
-        title: '錯誤',
-        description: error.message || '建立 Demo 資料失敗',
-        variant: 'destructive',
-      });
+      await client.upsertAddress(command);
+      setAddresses(await client.listAddresses());
+      setForm(EMPTY_FORM);
+      toast.success(form.addressId ? "Address updated." : "Address created.");
+    } catch (submitError) {
+      setError(toErrorMessage(submitError));
+      toast.error(toErrorMessage(submitError));
     } finally {
-      setGeneratingDemo(false);
+      setSaving(false);
+    }
+  };
+
+  const handleDeactivate = async (address: TenantAddressRecord) => {
+    if (!client) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await client.upsertAddress({
+        addressId: address.addressId,
+        ownerPassengerId: address.ownerPassengerId,
+        addressName: address.addressName,
+        addressText: address.addressText,
+        lat: address.lat,
+        lng: address.lng,
+        tags: address.tags,
+        activeFlag: false,
+      });
+      setAddresses(await client.listAddresses());
+      toast.success("Address deactivated.");
+    } catch (deactivateError) {
+      toast.error(toErrorMessage(deactivateError));
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">地址簿管理</h2>
-          <p className="text-muted-foreground">管理常用地址，快速建立預約</p>
-        </div>
-        <Button onClick={() => handleOpenDialog()} className="bg-gradient-primary">
-          <Plus className="h-4 w-4 mr-2" />
-          新增地址
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MapPin className="h-5 w-5" />
-            地址列表
-          </CardTitle>
-          <CardDescription>已儲存的常用地址</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8 text-muted-foreground">載入中...</div>
-          ) : addresses.length === 0 ? (
-            <div className="text-center py-12">
-              <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-4">
-                尚無地址記錄
-              </p>
-              <Button 
-                variant="outline" 
-                onClick={handleGenerateDemoData}
-                disabled={generatingDemo}
-              >
-                <Database className="mr-2 h-4 w-4" />
-                {generatingDemo ? '產生中...' : '產生 Demo 資料'}
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>名稱</TableHead>
-                  <TableHead>地址</TableHead>
-                  <TableHead>標籤</TableHead>
-                  <TableHead>可見權限</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {addresses.map((address) => (
-                  <TableRow key={address.id}>
-                    <TableCell className="font-medium">{address.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{address.address}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 flex-wrap">
-                        {address.tags?.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 flex-wrap">
-                        {address.visible_to_roles?.map((role) => (
-                          <Badge key={role} variant="outline" className="text-xs">
-                            {role}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenDialog(address)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteAddress(address.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingAddress ? "編輯地址" : "新增地址"}
-            </DialogTitle>
-            <DialogDescription>
-              使用地圖選擇位置或手動輸入地址資訊
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="name">地址名稱 *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="例如：公司總部、台北車站"
-              />
-            </div>
-
-            <div>
-              <Label>地圖選點</Label>
-              <MapPicker
-                onLocationSelect={handleLocationSelect}
-                initialLat={formData.latitude}
-                initialLng={formData.longitude}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="address">地址 *</Label>
-              <Input
-                id="address"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="完整地址"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="latitude">緯度</Label>
-                <Input
-                  id="latitude"
-                  type="number"
-                  step="0.000001"
-                  value={formData.latitude}
-                  onChange={(e) => setFormData({ ...formData, latitude: parseFloat(e.target.value) })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="longitude">經度</Label>
-                <Input
-                  id="longitude"
-                  type="number"
-                  step="0.000001"
-                  value={formData.longitude}
-                  onChange={(e) => setFormData({ ...formData, longitude: parseFloat(e.target.value) })}
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label>標籤</Label>
-              <div className="flex gap-2 mb-2">
-                <Input
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  placeholder="新增標籤"
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
-                />
-                <Button type="button" onClick={handleAddTag} size="sm">
-                  <Tag className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {formData.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="cursor-pointer" onClick={() => handleRemoveTag(tag)}>
-                    {tag} ×
-                  </Badge>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="visibility">可見權限</Label>
-              <Select
-                value={formData.visible_to_roles.join(',')}
-                onValueChange={(value) => setFormData({ ...formData, visible_to_roles: value.split(',') as ("admin" | "manager" | "user" | "viewer")[] })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">僅管理員</SelectItem>
-                  <SelectItem value="admin,manager">管理員與經理</SelectItem>
-                  <SelectItem value="admin,manager,user">所有使用者</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Address Book</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {error}
           </div>
+        )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              取消
+        <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void handleSubmit(event)}>
+          <div className="space-y-2">
+            <Label>Address name</Label>
+            <Input
+              value={form.addressName}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  addressName: event.target.value,
+                }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Owner passenger ID</Label>
+            <Input
+              value={form.ownerPassengerId}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  ownerPassengerId: event.target.value,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Address text</Label>
+            <Textarea
+              rows={3}
+              value={form.addressText}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  addressText: event.target.value,
+                }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Latitude</Label>
+            <Input
+              type="number"
+              value={form.lat}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, lat: event.target.value }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Longitude</Label>
+            <Input
+              type="number"
+              value={form.lng}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, lng: event.target.value }))
+              }
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Tags</Label>
+            <Input
+              value={form.tags}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, tags: event.target.value }))
+              }
+              placeholder="office, warehouse"
+            />
+          </div>
+          <div className="flex items-end gap-3 md:col-span-2">
+            <Button type="submit" disabled={saving}>
+              {form.addressId ? "Save Changes" : "Create Address"}
             </Button>
-            <Button onClick={handleSaveAddress} className="bg-gradient-primary">
-              {editingAddress ? "更新" : "新增"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            {form.addressId && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setForm(EMPTY_FORM)}
+              >
+                Cancel Edit
+              </Button>
+            )}
+          </div>
+        </form>
+
+        {loading ? (
+          <div className="py-8 text-center text-muted-foreground">載入中...</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead>Tags</TableHead>
+                <TableHead>Coordinates</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedAddresses.map((address) => (
+                <TableRow key={address.addressId}>
+                  <TableCell>{address.addressName}</TableCell>
+                  <TableCell>{address.addressText}</TableCell>
+                  <TableCell>{address.tags.join(", ") || "—"}</TableCell>
+                  <TableCell>
+                    {address.lat != null && address.lng != null
+                      ? `${address.lat}, ${address.lng}`
+                      : "—"}
+                  </TableCell>
+                  <TableCell>{address.activeFlag ? "Active" : "Inactive"}</TableCell>
+                  <TableCell>{formatDateTime(address.updatedAt)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <button
+                        className="text-primary hover:underline"
+                        type="button"
+                        onClick={() => setForm(toFormState(address))}
+                      >
+                        Edit
+                      </button>
+                      {address.activeFlag && (
+                        <button
+                          className="text-destructive hover:underline"
+                          type="button"
+                          onClick={() => void handleDeactivate(address)}
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
-};
-
-export default AddressManagement;
+}

@@ -1,10 +1,17 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import type { CreateReportJobCommand, ReportJobRecord } from "@drts/contracts";
+import { REPORT_OUTPUT_FORMATS } from "@drts/contracts";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Calendar, TrendingUp, Database } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -13,280 +20,189 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/contexts/AuthContext";
+import { formatDateTime, splitCommaSeparated, toErrorMessage } from "@/lib/formatting";
+import { toast } from "sonner";
 
-interface Report {
-  id: string;
-  name: string;
-  report_type: string;
-  format: string;
-  file_url: string | null;
-  last_run_at: string | null;
-  created_at: string;
-}
-
-const ReportManagement = () => {
-  const { profile } = useAuth();
-  const { toast } = useToast();
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [generatingDemo, setGeneratingDemo] = useState(false);
-
-  useEffect(() => {
-    fetchReports();
-  }, [profile]);
-
-  const fetchReports = async () => {
-    if (!profile?.tenant_id) return;
-    
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("reports")
-      .select("*")
-      .eq("tenant_id", profile.tenant_id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching reports:", error);
-      toast({
-        title: "載入失敗",
-        description: "無法載入報表資料",
-        variant: "destructive",
-      });
-    } else {
-      setReports(data || []);
-    }
-    setLoading(false);
-  };
-
-  const generateReport = async (type: "monthly_trips" | "department_cost" | "invoice_summary") => {
-    if (!profile?.tenant_id) return;
-
-    toast({
-      title: "產生報表中",
-      description: "報表正在背景產生，請稍候...",
-    });
-
-    try {
-      // Create report record
-      const { data: newReport, error: insertError } = await supabase
-        .from("reports")
-        .insert([
-          {
-            tenant_id: profile.tenant_id,
-            name: `${getReportTypeLabel(type)} - ${format(new Date(), "yyyy-MM-dd")}`,
-            report_type: type,
-            format: "csv" as const,
-            created_by: profile.id,
-          },
-        ])
-        .select()
-        .single();
-
-      if (insertError || !newReport) {
-        throw insertError || new Error("Failed to create report");
-      }
-
-      // Trigger report generation edge function
-      const { error: functionError } = await supabase.functions.invoke(
-        "generate-report",
-        {
-          body: { report_id: newReport.id },
-        }
-      );
-
-      if (functionError) {
-        console.error("Report generation error:", functionError);
-        toast({
-          title: "產生失敗",
-          description: functionError.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({ 
-          title: "報表已產生",
-          description: "報表產生完成，可在列表中下載"
-        });
-        fetchReports();
-      }
-    } catch (error: any) {
-      console.error("Error generating report:", error);
-      toast({
-        title: "產生失敗",
-        description: error.message || "發生未知錯誤",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const getReportTypeLabel = (type: string) => {
-    const types: Record<string, string> = {
-      monthly_trips: "月度趟次統計",
-      department_cost: "部門成本分析",
-      invoice_summary: "發票彙總報表",
-    };
-    return types[type] || type;
-  };
-
-  const downloadReport = (url: string | null) => {
-    if (!url) {
-      toast({
-        title: "下載失敗",
-        description: "報表檔案尚未產生",
-        variant: "destructive",
-      });
-      return;
-    }
-    window.open(url, "_blank");
-  };
-
-  const handleGenerateDemoData = async () => {
-    setGeneratingDemo(true);
-    try {
-      const { error } = await supabase.functions.invoke('seed-demo-data');
-
-      if (error) throw error;
-
-      toast({
-        title: '成功',
-        description: 'Demo 資料已建立',
-      });
-
-      fetchReports();
-    } catch (error: any) {
-      console.error('Error generating demo data:', error);
-      toast({
-        title: '錯誤',
-        description: error.message || '建立 Demo 資料失敗',
-        variant: 'destructive',
-      });
-    } finally {
-      setGeneratingDemo(false);
-    }
-  };
-
-  const quickReports: Array<{
-    type: "monthly_trips" | "department_cost" | "invoice_summary";
-    label: string;
-    icon: typeof Calendar | typeof TrendingUp | typeof FileText;
-  }> = [
-    { type: "monthly_trips", label: "月度趟次統計", icon: Calendar },
-    { type: "department_cost", label: "部門成本分析", icon: TrendingUp },
-    { type: "invoice_summary", label: "發票彙總報表", icon: FileText },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">報表下載</h2>
-        <p className="text-muted-foreground">產生並下載各類營運報表</p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {quickReports.map((report) => {
-          const Icon = report.icon;
-          return (
-            <Card key={report.type} className="hover:shadow-md transition-all cursor-pointer">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <Icon className="h-8 w-8 text-primary" />
-                  <Button
-                    size="sm"
-                    onClick={() => generateReport(report.type)}
-                    className="bg-gradient-primary"
-                  >
-                    產生
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <h3 className="font-semibold text-foreground">{report.label}</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  即時產生最新數據
-                </p>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            歷史報表
-          </CardTitle>
-          <CardDescription>已產生的報表檔案</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8 text-muted-foreground">載入中...</div>
-          ) : reports.length === 0 ? (
-            <div className="text-center py-12">
-              <Database className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-4">
-                尚無報表記錄
-              </p>
-              <Button 
-                variant="outline" 
-                onClick={handleGenerateDemoData}
-                disabled={generatingDemo}
-              >
-                <Database className="mr-2 h-4 w-4" />
-                {generatingDemo ? '產生中...' : '產生 Demo 資料'}
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>報表名稱</TableHead>
-                  <TableHead>類型</TableHead>
-                  <TableHead>格式</TableHead>
-                  <TableHead>產生時間</TableHead>
-                  <TableHead>狀態</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reports.map((report) => (
-                  <TableRow key={report.id}>
-                    <TableCell className="font-medium">{report.name}</TableCell>
-                    <TableCell>{getReportTypeLabel(report.report_type)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{report.format.toUpperCase()}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {report.last_run_at
-                        ? format(new Date(report.last_run_at), "yyyy-MM-dd HH:mm")
-                        : format(new Date(report.created_at), "yyyy-MM-dd HH:mm")}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={report.file_url ? "default" : "secondary"}>
-                        {report.file_url ? "完成" : "處理中"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => downloadReport(report.file_url)}
-                        disabled={!report.file_url}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        下載
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
+const INITIAL_FORM: CreateReportJobCommand = {
+  jobType: "tenant_usage_summary",
+  format: "csv",
 };
 
-export default ReportManagement;
+export default function ReportManagement() {
+  const { client } = useAuth();
+  const [jobs, setJobs] = useState<ReportJobRecord[]>([]);
+  const [form, setForm] = useState<CreateReportJobCommand>(INITIAL_FORM);
+  const [recipients, setRecipients] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!client) {
+      return;
+    }
+
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const nextJobs = await client.listTenantReportJobs();
+        if (!active) {
+          return;
+        }
+        setJobs(nextJobs);
+        setError(null);
+      } catch (loadError) {
+        if (!active) {
+          return;
+        }
+        setError(toErrorMessage(loadError));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await client.createTenantReportJob({
+        ...form,
+        ...(recipients.trim()
+          ? { recipients: splitCommaSeparated(recipients) }
+          : {}),
+      });
+      setJobs(await client.listTenantReportJobs());
+      setForm(INITIAL_FORM);
+      setRecipients("");
+      toast.success("Report job queued.");
+    } catch (submitError) {
+      setError(toErrorMessage(submitError));
+      toast.error(toErrorMessage(submitError));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Report Jobs</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {error && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void handleSubmit(event)}>
+          <div className="space-y-2">
+            <Label>Job type</Label>
+            <Input
+              value={form.jobType}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, jobType: event.target.value }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Format</Label>
+            <Select
+              value={form.format}
+              onValueChange={(format) =>
+                setForm((current) => ({
+                  ...current,
+                  format: format as CreateReportJobCommand["format"],
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REPORT_OUTPUT_FORMATS.map((format) => (
+                  <SelectItem key={format} value={format}>
+                    {format}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Recipients (comma-separated)</Label>
+            <Textarea
+              rows={2}
+              value={recipients}
+              onChange={(event) => setRecipients(event.target.value)}
+              placeholder="ops@example.com, finance@example.com"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <Button type="submit" disabled={saving}>
+              {saving ? "Submitting..." : "Queue Report Job"}
+            </Button>
+          </div>
+        </form>
+
+        {loading ? (
+          <div className="py-8 text-center text-muted-foreground">載入中...</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Job ID</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Format</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Artifact</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {jobs.map((job) => (
+                <TableRow key={job.jobId}>
+                  <TableCell className="font-medium">{job.jobId}</TableCell>
+                  <TableCell>{job.jobType}</TableCell>
+                  <TableCell>{job.format}</TableCell>
+                  <TableCell>{job.status}</TableCell>
+                  <TableCell>{formatDateTime(job.createdAt)}</TableCell>
+                  <TableCell>
+                    {job.artifact ? (
+                      <a
+                        className="text-primary hover:underline"
+                        href={job.artifact.downloadUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Download
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

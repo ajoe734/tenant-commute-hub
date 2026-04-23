@@ -1,59 +1,32 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from "@/contexts/AuthContext";
 
-export type AppRole = 'admin' | 'manager' | 'user' | 'viewer';
+export type AppRole =
+  | "tenant_admin"
+  | "tenant_ops_admin"
+  | "tenant_finance_admin"
+  | "tenant_viewer";
 
 export function useUserRole() {
-  const { user, profile } = useAuth();
-  const [roles, setRoles] = useState<AppRole[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { profile, loading } = useAuth();
+  const role = (profile?.role_code as AppRole | undefined) ?? null;
+  const roles = role ? [role] : [];
 
-  useEffect(() => {
-    if (!user || !profile) {
-      setRoles([]);
-      setLoading(false);
-      return;
-    }
+  const hasRole = (candidate: AppRole): boolean => roles.includes(candidate);
 
-    const fetchRoles = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('tenant_id', profile.tenant_id);
-
-        if (error) throw error;
-
-        setRoles(data?.map(r => r.role as AppRole) || []);
-      } catch (error) {
-        console.error('Error fetching user roles:', error);
-        setRoles([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRoles();
-  }, [user, profile]);
-
-  const hasRole = (role: AppRole): boolean => {
-    return roles.includes(role);
-  };
-
-  const isAdmin = hasRole('admin');
-  const isManager = hasRole('manager') || isAdmin;
-  const canManageBookings = isAdmin || isManager;
-  const canManagePassengers = isAdmin || isManager;
+  const isAdmin = hasRole("tenant_admin");
+  const isManager =
+    isAdmin || hasRole("tenant_ops_admin") || hasRole("tenant_finance_admin");
+  const canManageBookings = isAdmin || hasRole("tenant_ops_admin");
+  const canManagePassengers = isAdmin || hasRole("tenant_ops_admin");
 
   return {
     roles,
     loading,
+    role,
     hasRole,
     isAdmin,
     isManager,
     canManageBookings,
-    canManagePassengers
+    canManagePassengers,
   };
 }
