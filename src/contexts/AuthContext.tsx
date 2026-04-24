@@ -1,7 +1,6 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -10,10 +9,8 @@ import { ApiClient } from "@drts/api-client";
 import { useNavigate } from "react-router-dom";
 import {
   DEFAULT_TENANT_ID,
-  SESSION_STORAGE_KEY,
   createPublicClient,
   createTenantPortalClient,
-  normalizeTenantPortalSession,
   toTenantPortalSession,
   type TenantPortalProfile,
   type TenantPortalSession,
@@ -32,80 +29,15 @@ interface AuthContextType {
   loading: boolean;
   signIn: (input: {
     email: string;
-    fullName?: string;
-    roleCode?: string;
   }) => Promise<{ error: Error | null; session: TenantPortalSession | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function readStoredSession(): TenantPortalSession | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    return normalizeTenantPortalSession(
-      JSON.parse(raw) as TenantPortalSession,
-    );
-  } catch {
-    window.localStorage.removeItem(SESSION_STORAGE_KEY);
-    return null;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<TenantPortalSession | null>(null);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    let active = true;
-
-    const restoreSession = async () => {
-      const storedSession = readStoredSession();
-      if (!storedSession) {
-        if (active) {
-          setLoading(false);
-        }
-        return;
-      }
-
-      try {
-        const identity = await createTenantPortalClient(
-          storedSession,
-        ).getIdentityContext();
-        if (!active) {
-          return;
-        }
-        setSession({
-          ...storedSession,
-          identity,
-        });
-      } catch {
-        window.localStorage.removeItem(SESSION_STORAGE_KEY);
-        if (active) {
-          setSession(null);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void restoreSession();
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const client = useMemo(
     () => (session ? createTenantPortalClient(session) : null),
@@ -120,23 +52,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     : null;
 
-  const signIn = async (input: {
-    email: string;
-    fullName?: string;
-    roleCode?: string;
-  }) => {
+  const signIn = async (input: { email: string }) => {
     try {
-      const issuedSession = await createPublicClient().createTenantBootstrapSession({
-        email: input.email,
-        fullName: input.fullName,
-        roleCode: input.roleCode,
-        tenantId: DEFAULT_TENANT_ID,
-      });
+      const issuedSession =
+        await createPublicClient().createTenantBootstrapSession({
+          email: input.email,
+          tenantId: DEFAULT_TENANT_ID,
+        });
       const nextSession = toTenantPortalSession(issuedSession);
-      window.localStorage.setItem(
-        SESSION_STORAGE_KEY,
-        JSON.stringify(nextSession),
-      );
       setSession(nextSession);
       navigate("/");
       return { error: null, session: nextSession };
@@ -152,14 +75,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    window.localStorage.removeItem(SESSION_STORAGE_KEY);
     setSession(null);
     navigate("/login");
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, session, profile, client, loading, signIn, signOut }}
+      value={{
+        user,
+        session,
+        profile,
+        client,
+        loading: false,
+        signIn,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>

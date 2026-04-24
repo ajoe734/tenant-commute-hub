@@ -88,8 +88,6 @@ export interface CreateTenantBookingCommand extends LooseRecord {
 
 export interface CreateTenantBootstrapSessionCommand extends LooseRecord {
   email: string;
-  fullName?: string;
-  roleCode?: string;
   tenantId?: string;
 }
 
