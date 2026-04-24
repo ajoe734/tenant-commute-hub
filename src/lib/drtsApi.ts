@@ -21,10 +21,13 @@ export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 export const DEFAULT_TENANT_ID =
   import.meta.env.VITE_TENANT_ID ?? "tenant-demo-001";
 export const DEFAULT_BOOTSTRAP_EMAIL =
-  import.meta.env.VITE_BOOTSTRAP_EMAIL ?? "tenant.admin@example.com";
-export const DEFAULT_BOOTSTRAP_NAME =
-  import.meta.env.VITE_BOOTSTRAP_NAME ?? "Tenant Admin";
-export const SESSION_STORAGE_KEY = "drts-tenant-portal-session";
+  import.meta.env.VITE_BOOTSTRAP_EMAIL ?? "admin@acme.example";
+export const DEMO_INVITED_EMAILS = [
+  "admin@acme.example",
+  "ops@acme.example",
+  "finance@acme.example",
+  "viewer@acme.example",
+] as const;
 
 export function roleCodeToLabel(roleCode: string): string {
   switch (roleCode) {
