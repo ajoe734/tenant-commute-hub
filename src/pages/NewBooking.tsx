@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type {
   CreateTenantBookingCommand,
+  PartnerEligibilityVerificationRecord,
   TenantAddressRecord,
   TenantPassengerRecord,
 } from "@drts/contracts";
@@ -79,12 +80,17 @@ function defaultForm(): BookingFormState {
 
 export default function NewBooking() {
   const navigate = useNavigate();
-  const { client } = useAuth();
+  const { client, partnerEntry } = useAuth();
   const [passengers, setPassengers] = useState<TenantPassengerRecord[]>([]);
   const [addresses, setAddresses] = useState<TenantAddressRecord[]>([]);
   const [form, setForm] = useState<BookingFormState>(defaultForm);
+  const [cardLast4, setCardLast4] = useState("");
+  const [referenceToken, setReferenceToken] = useState("");
+  const [eligibilityVerification, setEligibilityVerification] =
+    useState<PartnerEligibilityVerificationRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [verifyingEligibility, setVerifyingEligibility] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -134,6 +140,39 @@ export default function NewBooking() {
     () => new Map(addresses.map((address) => [address.addressId, address])),
     [addresses],
   );
+  const eligibilityRequired =
+    partnerEntry?.eligibilityMode !== undefined &&
+    partnerEntry.eligibilityMode !== "none";
+  const canVerifyEligibility = Boolean(
+    client &&
+      partnerEntry &&
+      ((!partnerEntry ||
+        partnerEntry.eligibilityMode === "none" ||
+        partnerEntry.eligibilityMode === "bank_card_inline") &&
+      /^[0-9]{4}$/.test(cardLast4.trim())
+        ? true
+        : partnerEntry?.eligibilityMode === "reference_required" &&
+            referenceToken.trim().length > 0),
+  );
+
+  useEffect(() => {
+    if (!partnerEntry) {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      businessDispatchSubtype: partnerEntry.businessDispatchSubtype,
+      direction:
+        partnerEntry.businessDispatchSubtype === "credit_card_airport_transfer"
+          ? "pickup"
+          : current.direction,
+    }));
+  }, [partnerEntry]);
+
+  useEffect(() => {
+    setEligibilityVerification(null);
+  }, [partnerEntry?.entrySlug, cardLast4, referenceToken]);
 
   const handleAddressChange = (
     field: "pickupAddressId" | "dropoffAddressId",
@@ -149,6 +188,40 @@ export default function NewBooking() {
     }));
   };
 
+  const handleVerifyEligibility = async () => {
+    if (!client || !partnerEntry) {
+      return;
+    }
+
+    setVerifyingEligibility(true);
+    try {
+      const verification = await client.verifyPartnerEligibility({
+        entrySlug: partnerEntry.entrySlug,
+        ...(partnerEntry.eligibilityMode === "bank_card_inline"
+          ? { cardLast4: cardLast4.trim() }
+          : {}),
+        ...(partnerEntry.eligibilityMode === "reference_required"
+          ? { referenceToken: referenceToken.trim() }
+          : {}),
+        ...(form.flightNo.trim() ? { flightNo: form.flightNo.trim() } : {}),
+      });
+
+      setEligibilityVerification(verification);
+      if (verification.verificationStatus === "eligible") {
+        toast.success("Partner eligibility verified.");
+        setError(null);
+      } else {
+        toast.error("Partner eligibility was not approved for this booking.");
+      }
+    } catch (verifyError) {
+      const message = toErrorMessage(verifyError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setVerifyingEligibility(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!client) {
@@ -162,6 +235,13 @@ export default function NewBooking() {
     }
     if (!form.pickupAddress.trim() || !form.dropoffAddress.trim()) {
       setError("Pickup and dropoff addresses are required.");
+      return;
+    }
+    if (
+      eligibilityRequired &&
+      eligibilityVerification?.verificationStatus !== "eligible"
+    ) {
+      setError("Eligible partner verification is required before booking.");
       return;
     }
 
@@ -210,6 +290,13 @@ export default function NewBooking() {
           ? { luggageCount: Number(form.luggageCount) }
           : {}),
         ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
+        ...(partnerEntry ? { partnerEntrySlug: partnerEntry.entrySlug } : {}),
+        ...(eligibilityVerification?.eligibilityVerificationId
+          ? {
+              eligibilityVerificationId:
+                eligibilityVerification.eligibilityVerificationId,
+            }
+          : {}),
         signoffRequired: form.signoffRequired,
         expenseProofRequired: form.expenseProofRequired,
       };
@@ -245,6 +332,19 @@ export default function NewBooking() {
           <div className="py-8 text-center text-muted-foreground">載入中...</div>
         ) : (
           <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
+            {partnerEntry && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <div className="font-medium">{partnerEntry.displayName}</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Partner code: {partnerEntry.partnerCode}
+                  {partnerEntry.bankCode ? ` · Bank: ${partnerEntry.bankCode}` : ""}
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  This entry is locked to subtype `{partnerEntry.businessDispatchSubtype}`.
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Passenger</Label>
@@ -280,6 +380,7 @@ export default function NewBooking() {
                         businessDispatchSubtype as CreateTenantBookingCommand["businessDispatchSubtype"],
                     }))
                   }
+                  disabled={Boolean(partnerEntry)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -484,6 +585,10 @@ export default function NewBooking() {
                       direction: direction as "pickup" | "dropoff",
                     }))
                   }
+                  disabled={
+                    partnerEntry?.businessDispatchSubtype ===
+                    "credit_card_airport_transfer"
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -549,6 +654,64 @@ export default function NewBooking() {
                 />
               </div>
             </div>
+
+            {partnerEntry && (
+              <div className="space-y-4 rounded-lg border border-border/60 p-4">
+                <div>
+                  <h3 className="font-medium">Partner eligibility</h3>
+                  <p className="text-sm text-muted-foreground">
+                    This booking is being created under partner entry `{partnerEntry.entrySlug}`.
+                    {eligibilityRequired
+                      ? " Eligibility verification is required before submission."
+                      : " Eligibility verification is not required for this entry."}
+                  </p>
+                </div>
+
+                {partnerEntry.eligibilityMode === "bank_card_inline" && (
+                  <div className="space-y-2">
+                    <Label>Card last 4 digits</Label>
+                    <Input
+                      value={cardLast4}
+                      maxLength={4}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        setCardLast4(event.target.value.replace(/\D/g, "").slice(0, 4))
+                      }
+                      placeholder="2468"
+                    />
+                  </div>
+                )}
+
+                {partnerEntry.eligibilityMode === "reference_required" && (
+                  <div className="space-y-2">
+                    <Label>Partner reference token</Label>
+                    <Input
+                      value={referenceToken}
+                      onChange={(event) => setReferenceToken(event.target.value)}
+                      placeholder="BETA0001"
+                    />
+                  </div>
+                )}
+
+                {eligibilityRequired && (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!canVerifyEligibility || verifyingEligibility}
+                      onClick={() => void handleVerifyEligibility()}
+                    >
+                      {verifyingEligibility ? "Verifying..." : "Verify eligibility"}
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {eligibilityVerification
+                        ? `Status: ${eligibilityVerification.verificationStatus} (${eligibilityVerification.verificationReasonCode})`
+                        : "No eligibility verification recorded yet."}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">

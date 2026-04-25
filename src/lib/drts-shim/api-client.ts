@@ -8,6 +8,8 @@ import type {
   CreateTenantUserCommand,
   CreateTenantWebhookEndpointCommand,
   NotificationRecord,
+  PartnerChannelEntryRecord,
+  PartnerEligibilityVerificationRecord,
   ReportJobRecord,
   RotateTenantApiKeyCommand,
   TenantAddressRecord,
@@ -28,6 +30,7 @@ import type {
   UpdateTenantWebhookEndpointCommand,
   UpsertTenantAddressCommand,
   UpsertTenantPassengerCommand,
+  VerifyPartnerEligibilityCommand,
   WebhookDeliveryRecord,
 } from "@drts/contracts";
 
@@ -180,6 +183,37 @@ export class ApiClient {
     return this.post<TenantBootstrapSession>("/api/auth/tenant/bootstrap-session", {
       body: command,
     });
+  }
+
+  async listPartnerEntries(): Promise<PartnerChannelEntryRecord[]> {
+    return this.getList<PartnerChannelEntryRecord>("/api/partner/entries");
+  }
+
+  async getPartnerEntry(
+    entrySlug: string,
+  ): Promise<PartnerChannelEntryRecord> {
+    return this.get<PartnerChannelEntryRecord>(
+      `/api/partner/entries/${encodeURIComponent(entrySlug)}`,
+    );
+  }
+
+  async verifyPartnerEligibility(
+    command: VerifyPartnerEligibilityCommand,
+  ): Promise<PartnerEligibilityVerificationRecord> {
+    return this.post<PartnerEligibilityVerificationRecord>(
+      "/api/partner/eligibility/verify",
+      {
+        body: command,
+      },
+    );
+  }
+
+  async getPartnerEligibilityVerification(
+    eligibilityVerificationId: string,
+  ): Promise<PartnerEligibilityVerificationRecord> {
+    return this.get<PartnerEligibilityVerificationRecord>(
+      `/api/partner/eligibility/${encodeURIComponent(eligibilityVerificationId)}`,
+    );
   }
 
   async createTenantBooking(command: CreateTenantBookingCommand) {
