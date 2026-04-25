@@ -2,7 +2,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useParams,
+} from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -33,6 +39,15 @@ function withShell(element: JSX.Element) {
   );
 }
 
+function PartnerLoginRedirect() {
+  const { entrySlug } = useParams();
+  if (!entrySlug) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={`/partner/${entrySlug}/login`} replace />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -43,6 +58,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={withShell(<Dashboard />)} />
             <Route path="/login" element={<Login />} />
+            <Route path="/partner/:entrySlug" element={<PartnerLoginRedirect />} />
+            <Route path="/partner/:entrySlug/login" element={<Login />} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/bookings" element={<Navigate to="/booking-list" replace />} />
             <Route path="/admin" element={<Navigate to="/users" replace />} />

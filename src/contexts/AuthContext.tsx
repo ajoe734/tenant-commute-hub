@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { ApiClient } from "@drts/api-client";
+import type { PartnerChannelEntryRecord } from "@drts/contracts";
 import { useNavigate } from "react-router-dom";
 import {
   DEFAULT_TENANT_ID,
@@ -25,11 +26,14 @@ interface AuthContextType {
   user: AuthUser | null;
   session: TenantPortalSession | null;
   profile: TenantPortalProfile | null;
+  partnerEntry: PartnerChannelEntryRecord | null;
   client: ApiClient | null;
   loading: boolean;
   signIn: (input: {
     email: string;
+    tenantId?: string;
   }) => Promise<{ error: Error | null; session: TenantPortalSession | null }>;
+  setPartnerEntry: (entry: PartnerChannelEntryRecord | null) => void;
   signOut: () => Promise<void>;
 }
 
@@ -37,6 +41,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<TenantPortalSession | null>(null);
+  const [partnerEntry, setPartnerEntry] =
+    useState<PartnerChannelEntryRecord | null>(null);
   const navigate = useNavigate();
 
   const client = useMemo(
@@ -52,16 +58,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     : null;
 
-  const signIn = async (input: { email: string }) => {
+  const signIn = async (input: { email: string; tenantId?: string }) => {
     try {
       const issuedSession =
         await createPublicClient().createTenantBootstrapSession({
           email: input.email,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId:
+            input.tenantId ?? partnerEntry?.tenantId ?? DEFAULT_TENANT_ID,
         });
       const nextSession = toTenantPortalSession(issuedSession);
       setSession(nextSession);
-      navigate("/");
+      navigate(
+        partnerEntry
+          ? `/bookings/new?partnerEntry=${encodeURIComponent(partnerEntry.entrySlug)}`
+          : "/",
+      );
       return { error: null, session: nextSession };
     } catch (error) {
       return {
@@ -76,7 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     setSession(null);
-    navigate("/login");
+    navigate(
+      partnerEntry ? `/partner/${partnerEntry.entrySlug}/login` : "/login",
+    );
   };
 
   return (
@@ -85,9 +98,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         session,
         profile,
+        partnerEntry,
         client,
         loading: false,
         signIn,
+        setPartnerEntry,
         signOut,
       }}
     >
