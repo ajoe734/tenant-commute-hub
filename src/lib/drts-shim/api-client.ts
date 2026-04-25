@@ -29,7 +29,7 @@ import type {
   UpsertTenantAddressCommand,
   UpsertTenantPassengerCommand,
   WebhookDeliveryRecord,
-} from "./contracts";
+} from "@drts/contracts";
 
 export interface ApiClientConfig {
   baseUrl: string;

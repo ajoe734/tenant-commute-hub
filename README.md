@@ -64,6 +64,22 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/ef50dd6c-ed55-49ec-8c18-21e71020e7f0) and click on Share -> Publish.
 
+## Shared DRTS contracts
+
+This repo prefers the live sibling `drts-fleet-platform` checkout for
+`@drts/contracts` and `@drts/api-client` during local pair-development.
+
+Standalone builds such as Lovable fall back to the managed contract snapshot in
+`src/lib/drts-shim/generated/`. Refresh that snapshot after core contract
+changes with:
+
+```sh
+npm run sync:contracts
+```
+
+If the core repo is not in the default sibling path, set
+`DRTS_CORE_REPO_PATH=/path/to/drts-fleet-platform` before running the sync.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!
