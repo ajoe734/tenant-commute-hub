@@ -23,7 +23,9 @@
 
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@drts/api-client": ["./src/lib/drts-shim/api-client.ts"],
+      "@drts/contracts": ["./src/lib/drts-shim/contracts.ts"]
     }
   },
   "include": ["src"]

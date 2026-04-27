@@ -7,10 +7,14 @@ import type {
   CreateTenantBookingCommand,
   CreateTenantUserCommand,
   CreateTenantWebhookEndpointCommand,
+  IssueTenantApiKeyCommand,
   NotificationRecord,
+  PartnerChannelEntryRecord,
+  PartnerEligibilityVerificationRecord,
   ReportJobRecord,
   RotateTenantApiKeyCommand,
   TenantAddressRecord,
+  TenantApiKeyIssued,
   TenantApiKeyRecord,
   TenantBillingProfile,
   TenantBootstrapSession,
@@ -28,6 +32,7 @@ import type {
   UpdateTenantWebhookEndpointCommand,
   UpsertTenantAddressCommand,
   UpsertTenantPassengerCommand,
+  VerifyPartnerEligibilityCommand,
   WebhookDeliveryRecord,
 } from "@drts/contracts";
 
@@ -160,7 +165,9 @@ export class ApiClient {
 
       const response = await fetch(url, init);
       if (!response.ok) {
-        throw new Error(`API error ${response.status}: ${await response.text()}`);
+        throw new Error(
+          `API error ${response.status}: ${await response.text()}`,
+        );
       }
 
       const envelope: ApiSuccessEnvelope<T> = await response.json();
@@ -177,9 +184,41 @@ export class ApiClient {
   async createTenantBootstrapSession(
     command: CreateTenantBootstrapSessionCommand,
   ): Promise<TenantBootstrapSession> {
-    return this.post<TenantBootstrapSession>("/api/auth/tenant/bootstrap-session", {
-      body: command,
-    });
+    return this.post<TenantBootstrapSession>(
+      "/api/auth/tenant/bootstrap-session",
+      {
+        body: command,
+      },
+    );
+  }
+
+  async listPartnerEntries(): Promise<PartnerChannelEntryRecord[]> {
+    return this.getList<PartnerChannelEntryRecord>("/api/partner/entries");
+  }
+
+  async getPartnerEntry(entrySlug: string): Promise<PartnerChannelEntryRecord> {
+    return this.get<PartnerChannelEntryRecord>(
+      `/api/partner/entries/${encodeURIComponent(entrySlug)}`,
+    );
+  }
+
+  async verifyPartnerEligibility(
+    command: VerifyPartnerEligibilityCommand,
+  ): Promise<PartnerEligibilityVerificationRecord> {
+    return this.post<PartnerEligibilityVerificationRecord>(
+      "/api/partner/eligibility/verify",
+      {
+        body: command,
+      },
+    );
+  }
+
+  async getPartnerEligibilityVerification(
+    eligibilityVerificationId: string,
+  ): Promise<PartnerEligibilityVerificationRecord> {
+    return this.get<PartnerEligibilityVerificationRecord>(
+      `/api/partner/eligibility/${encodeURIComponent(eligibilityVerificationId)}`,
+    );
   }
 
   async createTenantBooking(command: CreateTenantBookingCommand) {
@@ -253,8 +292,12 @@ export class ApiClient {
     return this.getList<TenantApiKeyRecord>("/api/tenant/api-keys");
   }
 
-  async issueApiKey(command: Record<string, unknown>) {
-    return this.post("/api/tenant/api-keys", { body: command });
+  async issueApiKey(
+    command: IssueTenantApiKeyCommand,
+  ): Promise<TenantApiKeyIssued> {
+    return this.post<TenantApiKeyIssued>("/api/tenant/api-keys", {
+      body: command,
+    });
   }
 
   async rotateApiKey(apiKeyId: string, command: RotateTenantApiKeyCommand) {
@@ -265,7 +308,9 @@ export class ApiClient {
   }
 
   async revokeApiKey(apiKeyId: string) {
-    return this.post(`/api/tenant/api-keys/${encodeURIComponent(apiKeyId)}/revoke`);
+    return this.post(
+      `/api/tenant/api-keys/${encodeURIComponent(apiKeyId)}/revoke`,
+    );
   }
 
   async listWebhooks(): Promise<TenantWebhookEndpoint[]> {

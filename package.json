@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
     "sync:contracts": "node ./scripts/sync-drts-contract-snapshot.mjs"
   },
   "dependencies": {
