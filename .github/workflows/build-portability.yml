@@ -6,25 +6,39 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  HAS_TENANT_REPO_PAT: ${{ secrets.TENANT_REPO_PAT != '' }}
-
 jobs:
   build-with-core-checkout:
-    if: ${{ env.HAS_TENANT_REPO_PAT == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tenant repo
         uses: actions/checkout@v4
 
+      - name: Detect canonical core checkout token
+        id: core-token
+        env:
+          TENANT_REPO_PAT: ${{ secrets.TENANT_REPO_PAT }}
+        run: |
+          if [ -n "$TENANT_REPO_PAT" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout drts-fleet-platform
+        if: ${{ steps.core-token.outputs.available == 'true' }}
         uses: actions/checkout@v4
         with:
           repository: ajoe734/drts-fleet-platform
           path: drts-fleet-platform
           token: ${{ secrets.TENANT_REPO_PAT }}
 
+      - name: Skip canonical checkout
+        if: ${{ steps.core-token.outputs.available != 'true' }}
+        run: |
+          echo "TENANT_REPO_PAT is not configured; local shim portability remains covered by build-with-local-shim."
+
       - name: Setup Node
+        if: ${{ steps.core-token.outputs.available == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -32,9 +46,11 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
+        if: ${{ steps.core-token.outputs.available == 'true' }}
         run: npm ci
 
       - name: Build against canonical sibling checkout
+        if: ${{ steps.core-token.outputs.available == 'true' }}
         env:
           DRTS_CORE_REPO_PATH: ${{ github.workspace }}/drts-fleet-platform
         run: npm run build
