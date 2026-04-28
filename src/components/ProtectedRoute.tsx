@@ -19,6 +19,16 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!user) {
+    const partnerPathMatch = location.pathname.match(/^\/partner\/([^/]+)/);
+    if (partnerPathMatch?.[1]) {
+      return (
+        <Navigate
+          to={`/partner/${decodeURIComponent(partnerPathMatch[1])}/login`}
+          replace
+        />
+      );
+    }
+
     const partnerEntrySlug = new URLSearchParams(location.search).get(
       "partnerEntry",
     );

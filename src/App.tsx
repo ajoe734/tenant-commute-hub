@@ -11,7 +11,7 @@ import {
 } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import AddressManagement from "./pages/AddressManagement";
 import AdminPanel from "./pages/AdminPanel";
 import ApiKeyManagement from "./pages/ApiKeyManagement";
@@ -45,7 +45,25 @@ function PartnerLoginRedirect() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to={`/partner/${entrySlug}/login`} replace />;
+  return <Navigate to={`/partner/${entrySlug}/bookings/new`} replace />;
+}
+
+function PartnerAwareHome() {
+  const { isPartnerMode, partnerHomePath } = useAuth();
+  if (isPartnerMode) {
+    return <Navigate to={partnerHomePath} replace />;
+  }
+
+  return <Dashboard />;
+}
+
+function PartnerShellOnly({ element }: { element: JSX.Element }) {
+  const { isPartnerMode, partnerHomePath } = useAuth();
+  if (isPartnerMode) {
+    return <Navigate to={partnerHomePath} replace />;
+  }
+
+  return element;
 }
 
 const App = () => (
@@ -56,33 +74,67 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={withShell(<Dashboard />)} />
+            <Route path="/" element={withShell(<PartnerAwareHome />)} />
             <Route path="/login" element={<Login />} />
             <Route path="/partner/:entrySlug" element={<PartnerLoginRedirect />} />
             <Route path="/partner/:entrySlug/login" element={<Login />} />
+            <Route
+              path="/partner/:entrySlug/bookings/new"
+              element={withShell(<NewBooking />)}
+            />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/bookings" element={<Navigate to="/booking-list" replace />} />
             <Route path="/admin" element={<Navigate to="/users" replace />} />
             <Route path="/cost-centers" element={<Navigate to="/" replace />} />
-            <Route path="/booking-list" element={withShell(<BookingList />)} />
+            <Route
+              path="/booking-list"
+              element={withShell(<PartnerShellOnly element={<BookingList />} />)}
+            />
             <Route
               path="/booking-list/:bookingId"
-              element={withShell(<BookingDetail />)}
+              element={withShell(<PartnerShellOnly element={<BookingDetail />} />)}
             />
             <Route path="/bookings/new" element={withShell(<NewBooking />)} />
-            <Route path="/passengers" element={withShell(<PassengerManagement />)} />
-            <Route path="/addresses" element={withShell(<AddressManagement />)} />
-            <Route path="/reports" element={withShell(<ReportManagement />)} />
-            <Route path="/api-keys" element={withShell(<ApiKeyManagement />)} />
-            <Route path="/webhooks" element={withShell(<WebhookManagement />)} />
-            <Route path="/billing" element={withShell(<BillingManagement />)} />
+            <Route
+              path="/passengers"
+              element={withShell(<PartnerShellOnly element={<PassengerManagement />} />)}
+            />
+            <Route
+              path="/addresses"
+              element={withShell(<PartnerShellOnly element={<AddressManagement />} />)}
+            />
+            <Route
+              path="/reports"
+              element={withShell(<PartnerShellOnly element={<ReportManagement />} />)}
+            />
+            <Route
+              path="/api-keys"
+              element={withShell(<PartnerShellOnly element={<ApiKeyManagement />} />)}
+            />
+            <Route
+              path="/webhooks"
+              element={withShell(<PartnerShellOnly element={<WebhookManagement />} />)}
+            />
+            <Route
+              path="/billing"
+              element={withShell(<PartnerShellOnly element={<BillingManagement />} />)}
+            />
             <Route
               path="/notifications"
-              element={withShell(<NotificationSettings />)}
+              element={withShell(<PartnerShellOnly element={<NotificationSettings />} />)}
             />
-            <Route path="/sla" element={withShell(<SlaManagement />)} />
-            <Route path="/users" element={withShell(<AdminPanel />)} />
-            <Route path="/audit" element={withShell(<AuditLog />)} />
+            <Route
+              path="/sla"
+              element={withShell(<PartnerShellOnly element={<SlaManagement />} />)}
+            />
+            <Route
+              path="/users"
+              element={withShell(<PartnerShellOnly element={<AdminPanel />} />)}
+            />
+            <Route
+              path="/audit"
+              element={withShell(<PartnerShellOnly element={<AuditLog />} />)}
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

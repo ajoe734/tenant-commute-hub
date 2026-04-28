@@ -17,7 +17,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleCodeToLabel } from "@/lib/drtsApi";
+import {
+  buildPartnerBranding,
+  PARTNER_SUPPORT_COPY,
+  partnerAccentStyle,
+  partnerRoute,
+  roleCodeToLabel,
+} from "@/lib/drtsApi";
 import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
@@ -40,6 +46,10 @@ const navigation = [
   { name: "審計軌跡", href: "/audit", icon: ClipboardList },
 ];
 
+const partnerNavigation = [
+  { name: "建立預約", href: "/bookings/new", icon: Plus },
+];
+
 function isRouteActive(pathname: string, href: string): boolean {
   if (href === "/") {
     return pathname === "/";
@@ -50,31 +60,53 @@ function isRouteActive(pathname: string, href: string): boolean {
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
-  const { signOut, profile } = useAuth();
+  const { signOut, profile, partnerEntry, isPartnerMode } = useAuth();
+  const visibleNavigation = isPartnerMode ? partnerNavigation : navigation;
+  const brandingItems = buildPartnerBranding(partnerEntry);
   const activeItem =
-    navigation.find((item) => isRouteActive(location.pathname, item.href)) ??
+    visibleNavigation.find((item) =>
+      isRouteActive(
+        location.pathname,
+        partnerEntry ? partnerRoute(partnerEntry.entrySlug, item.href) : item.href,
+      ),
+    ) ??
     null;
 
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 w-64 bg-card border-r border-border shadow-sm z-50">
         <div className="flex h-16 items-center gap-2 border-b border-border px-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-primary shadow-glow">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-primary shadow-glow"
+            style={
+              partnerEntry?.themeAccent
+                ? { background: partnerEntry.themeAccent }
+                : undefined
+            }
+          >
             <Building2 className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="font-semibold text-foreground">租戶入口</h2>
-            <p className="text-xs text-muted-foreground">BFF Consumer</p>
+            <h2 className="font-semibold text-foreground">
+              {partnerEntry?.displayName ?? "租戶入口"}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {isPartnerMode ? "合作方訂車入口" : "租戶管理入口"}
+            </p>
           </div>
         </div>
 
         <nav className="flex-1 space-y-1 p-4">
-          {navigation.map((item) => {
-            const isActive = isRouteActive(location.pathname, item.href);
+          {visibleNavigation.map((item) => {
+            const targetHref =
+              partnerEntry && isPartnerMode
+                ? partnerRoute(partnerEntry.entrySlug, item.href)
+                : item.href;
+            const isActive = isRouteActive(location.pathname, targetHref);
             return (
               <Link
                 key={item.name}
-                to={item.href}
+                to={targetHref}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all",
                   isActive
@@ -90,6 +122,22 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         </nav>
 
         <div className="p-4 border-t border-border">
+          {isPartnerMode && partnerEntry && (
+            <div
+              className="mb-4 rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground"
+              style={partnerAccentStyle(partnerEntry)}
+            >
+              <div className="mb-2 font-medium text-foreground">合作方案資訊</div>
+              <div className="space-y-1">
+                {brandingItems.map((item) => (
+                  <div key={item.label}>
+                    {item.label}：{item.value}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 leading-5">{PARTNER_SUPPORT_COPY}</p>
+            </div>
+          )}
           <Button
             variant="ghost"
             className="w-full justify-start gap-3"
@@ -105,14 +153,16 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-6">
           <div className="flex flex-1 items-center justify-between">
             <h1 className="text-xl font-semibold text-foreground">
-              {activeItem?.name || "儀表板"}
+              {activeItem?.name || (isPartnerMode ? "合作方訂車入口" : "儀表板")}
             </h1>
             <div className="text-right">
               <div className="text-sm text-foreground">
-                {profile?.full_name || profile?.email || "Bootstrap Session"}
+                {profile?.full_name || profile?.email || "臨時工作階段"}
               </div>
               <div className="text-xs text-muted-foreground">
-                {roleCodeToLabel(profile?.role_code ?? "tenant_admin")}
+                {isPartnerMode && partnerEntry
+                  ? `${roleCodeToLabel(profile?.role_code ?? "tenant_admin")} · ${partnerEntry.partnerCode}`
+                  : roleCodeToLabel(profile?.role_code ?? "tenant_admin")}
               </div>
             </div>
           </div>

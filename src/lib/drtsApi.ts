@@ -1,5 +1,7 @@
+import type { CSSProperties } from "react";
 import { ApiClient } from "@drts/api-client";
 import type { IdentityContext, TenantBootstrapSession as IssuedTenantBootstrapSession } from "@drts/contracts";
+import type { PartnerChannelEntryRecord, PartnerEligibilityMode } from "@drts/contracts";
 
 export interface TenantPortalProfile {
   id: string;
@@ -29,19 +31,68 @@ export const DEMO_INVITED_EMAILS = [
   "viewer@acme.example",
 ] as const;
 
+export const PARTNER_SUPPORT_COPY =
+  "若需調整乘車資訊或確認資格審核，請聯絡合作方案服務窗口或貴單位承辦人員。";
+
 export function roleCodeToLabel(roleCode: string): string {
   switch (roleCode) {
     case "tenant_admin":
-      return "Tenant Admin";
+      return "租戶管理員";
     case "tenant_ops_admin":
-      return "Tenant Ops Admin";
+      return "租戶營運管理員";
     case "tenant_finance_admin":
-      return "Tenant Finance Admin";
+      return "租戶財務管理員";
     case "tenant_viewer":
-      return "Tenant Viewer";
+      return "租戶檢視者";
     default:
       return roleCode;
   }
+}
+
+export function eligibilityModeToLabel(mode: PartnerEligibilityMode): string {
+  switch (mode) {
+    case "none":
+      return "免資格驗證";
+    case "bank_card_inline":
+      return "卡號末四碼驗證";
+    case "reference_required":
+      return "合作方案代碼驗證";
+    default:
+      return mode;
+  }
+}
+
+export function partnerRoute(entrySlug: string, path = "/bookings/new"): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `/partner/${entrySlug}${normalizedPath}`;
+}
+
+export function buildPartnerBranding(
+  entry: PartnerChannelEntryRecord | null,
+): Array<{ label: string; value: string }> {
+  if (!entry) {
+    return [];
+  }
+
+  return [
+    { label: "合作代碼", value: entry.partnerCode },
+    ...(entry.bankCode ? [{ label: "銀行代碼", value: entry.bankCode }] : []),
+    { label: "方案代碼", value: entry.programId },
+    { label: "資格規則", value: eligibilityModeToLabel(entry.eligibilityMode) },
+  ];
+}
+
+export function partnerAccentStyle(
+  entry: PartnerChannelEntryRecord | null,
+): CSSProperties | undefined {
+  if (!entry?.themeAccent) {
+    return undefined;
+  }
+
+  return {
+    borderColor: entry.themeAccent,
+    boxShadow: `0 0 0 1px ${entry.themeAccent}20`,
+  };
 }
 
 export function normalizeTenantPortalSession(

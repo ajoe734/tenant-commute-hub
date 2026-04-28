@@ -27,6 +27,8 @@ interface AuthContextType {
   session: TenantPortalSession | null;
   profile: TenantPortalProfile | null;
   partnerEntry: PartnerChannelEntryRecord | null;
+  isPartnerMode: boolean;
+  partnerHomePath: string;
   client: ApiClient | null;
   loading: boolean;
   signIn: (input: {
@@ -51,6 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const profile = session?.profile ?? null;
+  const isPartnerMode = partnerEntry !== null;
+  const partnerHomePath = partnerEntry
+    ? `/partner/${partnerEntry.entrySlug}/bookings/new`
+    : "/";
   const user = session
     ? {
         id: session.profile.id,
@@ -70,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
       navigate(
         partnerEntry
-          ? `/bookings/new?partnerEntry=${encodeURIComponent(partnerEntry.entrySlug)}`
+          ? partnerHomePath
           : "/",
       );
       return { error: null, session: nextSession };
@@ -99,6 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         profile,
         partnerEntry,
+        isPartnerMode,
+        partnerHomePath,
         client,
         loading: false,
         signIn,

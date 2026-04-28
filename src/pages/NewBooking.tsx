@@ -21,6 +21,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  buildPartnerBranding,
+  eligibilityModeToLabel,
+  PARTNER_SUPPORT_COPY,
+  partnerAccentStyle,
+} from "@/lib/drtsApi";
 import { toDatetimeLocalValue, toErrorMessage } from "@/lib/formatting";
 import { toast } from "sonner";
 
@@ -80,7 +86,7 @@ function defaultForm(): BookingFormState {
 
 export default function NewBooking() {
   const navigate = useNavigate();
-  const { client, partnerEntry } = useAuth();
+  const { client, partnerEntry, isPartnerMode } = useAuth();
   const [passengers, setPassengers] = useState<TenantPassengerRecord[]>([]);
   const [addresses, setAddresses] = useState<TenantAddressRecord[]>([]);
   const [form, setForm] = useState<BookingFormState>(defaultForm);
@@ -92,6 +98,14 @@ export default function NewBooking() {
   const [saving, setSaving] = useState(false);
   const [verifyingEligibility, setVerifyingEligibility] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const resetPartnerForm = () => {
+    setForm(defaultForm());
+    setCardLast4("");
+    setReferenceToken("");
+    setEligibilityVerification(null);
+    setError(null);
+  };
 
   useEffect(() => {
     if (!client) {
@@ -143,6 +157,7 @@ export default function NewBooking() {
   const eligibilityRequired =
     partnerEntry?.eligibilityMode !== undefined &&
     partnerEntry.eligibilityMode !== "none";
+  const partnerBranding = buildPartnerBranding(partnerEntry);
   const canVerifyEligibility = Boolean(
     client &&
       partnerEntry &&
@@ -208,10 +223,10 @@ export default function NewBooking() {
 
       setEligibilityVerification(verification);
       if (verification.verificationStatus === "eligible") {
-        toast.success("Partner eligibility verified.");
+        toast.success("合作方案資格驗證成功。");
         setError(null);
       } else {
-        toast.error("Partner eligibility was not approved for this booking.");
+        toast.error("此筆預約未通過合作方案資格驗證。");
       }
     } catch (verifyError) {
       const message = toErrorMessage(verifyError);
@@ -230,18 +245,18 @@ export default function NewBooking() {
 
     const passenger = passengerLookup.get(form.passengerId);
     if (!passenger) {
-      setError("A valid passenger is required.");
+      setError("請先選擇有效的乘車人。");
       return;
     }
     if (!form.pickupAddress.trim() || !form.dropoffAddress.trim()) {
-      setError("Pickup and dropoff addresses are required.");
+      setError("請填寫上車與下車地點。");
       return;
     }
     if (
       eligibilityRequired &&
       eligibilityVerification?.verificationStatus !== "eligible"
     ) {
-      setError("Eligible partner verification is required before booking.");
+      setError("送出預約前需先完成合作方案資格驗證。");
       return;
     }
 
@@ -302,8 +317,12 @@ export default function NewBooking() {
       };
 
       await client.createTenantBooking(command);
-      toast.success("Booking created.");
-      navigate("/booking-list");
+      toast.success(isPartnerMode ? "合作方預約已送出。" : "預約已建立。");
+      if (isPartnerMode) {
+        resetPartnerForm();
+      } else {
+        navigate("/booking-list");
+      }
     } catch (submitError) {
       setError(toErrorMessage(submitError));
       toast.error(toErrorMessage(submitError));
@@ -315,10 +334,11 @@ export default function NewBooking() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Create Booking</CardTitle>
+        <CardTitle>{isPartnerMode ? "建立合作方預約" : "建立預約"}</CardTitle>
         <CardDescription>
-          Booking truth now lives in `/api/tenant/bookings`. Price quotes and
-          dispatch lifecycle are no longer computed in repo B.
+          {isPartnerMode
+            ? "此入口僅提供合作方案預約建立。預約真相仍由 `/api/tenant/bookings` 與資格驗證 API 維護。"
+            : "預約真相已統一由 `/api/tenant/bookings` 維護，價格試算與派車生命週期不再於前端 repo 計算。"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -333,21 +353,30 @@ export default function NewBooking() {
         ) : (
           <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
             {partnerEntry && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <div
+                className="rounded-lg border border-primary/20 bg-primary/5 p-4"
+                style={partnerAccentStyle(partnerEntry)}
+              >
                 <div className="font-medium">{partnerEntry.displayName}</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  Partner code: {partnerEntry.partnerCode}
-                  {partnerEntry.bankCode ? ` · Bank: ${partnerEntry.bankCode}` : ""}
+                <div className="mt-2 grid gap-1 text-sm text-muted-foreground">
+                  {partnerBranding.map((item) => (
+                    <div key={item.label}>
+                      {item.label}：{item.value}
+                    </div>
+                  ))}
                 </div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  This entry is locked to subtype `{partnerEntry.businessDispatchSubtype}`.
+                <div className="mt-2 text-sm text-muted-foreground">
+                  此入口固定使用 `{partnerEntry.businessDispatchSubtype}` 車隊派遣子類型。
+                </div>
+                <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {PARTNER_SUPPORT_COPY}
                 </div>
               </div>
             )}
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Passenger</Label>
+                <Label>乘車人</Label>
                 <Select
                   value={form.passengerId}
                   onValueChange={(passengerId) =>
@@ -355,7 +384,7 @@ export default function NewBooking() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select passenger" />
+                    <SelectValue placeholder="選擇乘車人" />
                   </SelectTrigger>
                   <SelectContent>
                     {passengers.map((passenger) => (
@@ -370,7 +399,7 @@ export default function NewBooking() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Subtype</Label>
+                <Label>派遣子類型</Label>
                 <Select
                   value={form.businessDispatchSubtype}
                   onValueChange={(businessDispatchSubtype) =>
@@ -398,7 +427,7 @@ export default function NewBooking() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Pickup saved address</Label>
+                <Label>上車常用地址</Label>
                 <Select
                   value={form.pickupAddressId}
                   onValueChange={(value) =>
@@ -406,7 +435,7 @@ export default function NewBooking() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select pickup address" />
+                    <SelectValue placeholder="選擇常用上車地址" />
                   </SelectTrigger>
                   <SelectContent>
                     {addresses.map((address) => (
@@ -425,11 +454,11 @@ export default function NewBooking() {
                       pickupAddress: event.target.value,
                     }))
                   }
-                  placeholder="Pickup address"
+                  placeholder="輸入上車地址"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Dropoff saved address</Label>
+                <Label>下車常用地址</Label>
                 <Select
                   value={form.dropoffAddressId}
                   onValueChange={(value) =>
@@ -437,7 +466,7 @@ export default function NewBooking() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select dropoff address" />
+                    <SelectValue placeholder="選擇常用下車地址" />
                   </SelectTrigger>
                   <SelectContent>
                     {addresses.map((address) => (
@@ -456,14 +485,14 @@ export default function NewBooking() {
                       dropoffAddress: event.target.value,
                     }))
                   }
-                  placeholder="Dropoff address"
+                  placeholder="輸入下車地址"
                 />
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Reservation window start</Label>
+                <Label>搭乘時間起</Label>
                 <Input
                   type="datetime-local"
                   value={form.reservationWindowStart}
@@ -477,7 +506,7 @@ export default function NewBooking() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Reservation window end</Label>
+                <Label>搭乘時間迄</Label>
                 <Input
                   type="datetime-local"
                   value={form.reservationWindowEnd}
@@ -494,7 +523,7 @@ export default function NewBooking() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Booked by name</Label>
+                <Label>代訂人姓名</Label>
                 <Input
                   value={form.bookedByName}
                   onChange={(event) =>
@@ -506,7 +535,7 @@ export default function NewBooking() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Booked by email</Label>
+                <Label>代訂人電子郵件</Label>
                 <Input
                   type="email"
                   value={form.bookedByEmail}
@@ -522,7 +551,7 @@ export default function NewBooking() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Onsite contact name</Label>
+                <Label>現場聯絡人姓名</Label>
                 <Input
                   value={form.onsiteContactName}
                   onChange={(event) =>
@@ -534,7 +563,7 @@ export default function NewBooking() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Onsite contact phone</Label>
+                <Label>現場聯絡人電話</Label>
                 <Input
                   value={form.onsiteContactPhone}
                   onChange={(event) =>
@@ -549,7 +578,7 @@ export default function NewBooking() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Cost center</Label>
+                <Label>成本中心</Label>
                 <Input
                   value={form.costCenter}
                   onChange={(event) =>
@@ -561,7 +590,7 @@ export default function NewBooking() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Vehicle preference</Label>
+                <Label>車型偏好</Label>
                 <Input
                   value={form.vehiclePreference}
                   onChange={(event) =>
@@ -576,7 +605,7 @@ export default function NewBooking() {
 
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <Label>Direction</Label>
+                <Label>接送方向</Label>
                 <Select
                   value={form.direction}
                   onValueChange={(direction) =>
@@ -594,13 +623,13 @@ export default function NewBooking() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pickup">pickup</SelectItem>
-                    <SelectItem value="dropoff">dropoff</SelectItem>
+                    <SelectItem value="pickup">接機 / 接送起點</SelectItem>
+                    <SelectItem value="dropoff">送機 / 送達終點</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Flight No</Label>
+                <Label>航班號碼</Label>
                 <Input
                   value={form.flightNo}
                   onChange={(event) =>
@@ -612,7 +641,7 @@ export default function NewBooking() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Terminal</Label>
+                <Label>航廈</Label>
                 <Input
                   value={form.terminal}
                   onChange={(event) =>
@@ -627,7 +656,7 @@ export default function NewBooking() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Luggage count</Label>
+                <Label>行李件數</Label>
                 <Input
                   type="number"
                   min={0}
@@ -641,7 +670,7 @@ export default function NewBooking() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Notes</Label>
+                <Label>備註</Label>
                 <Textarea
                   rows={3}
                   value={form.notes}
@@ -658,18 +687,18 @@ export default function NewBooking() {
             {partnerEntry && (
               <div className="space-y-4 rounded-lg border border-border/60 p-4">
                 <div>
-                  <h3 className="font-medium">Partner eligibility</h3>
+                  <h3 className="font-medium">合作方案資格驗證</h3>
                   <p className="text-sm text-muted-foreground">
-                    This booking is being created under partner entry `{partnerEntry.entrySlug}`.
+                    此筆預約將以合作方入口 `{partnerEntry.entrySlug}` 建立。
                     {eligibilityRequired
-                      ? " Eligibility verification is required before submission."
-                      : " Eligibility verification is not required for this entry."}
+                      ? ` 送出前需完成 ${eligibilityModeToLabel(partnerEntry.eligibilityMode)}。`
+                      : " 此入口不需要額外資格驗證。"}
                   </p>
                 </div>
 
                 {partnerEntry.eligibilityMode === "bank_card_inline" && (
                   <div className="space-y-2">
-                    <Label>Card last 4 digits</Label>
+                    <Label>卡號末四碼</Label>
                     <Input
                       value={cardLast4}
                       maxLength={4}
@@ -684,7 +713,7 @@ export default function NewBooking() {
 
                 {partnerEntry.eligibilityMode === "reference_required" && (
                   <div className="space-y-2">
-                    <Label>Partner reference token</Label>
+                    <Label>合作方案識別碼</Label>
                     <Input
                       value={referenceToken}
                       onChange={(event) => setReferenceToken(event.target.value)}
@@ -701,12 +730,12 @@ export default function NewBooking() {
                       disabled={!canVerifyEligibility || verifyingEligibility}
                       onClick={() => void handleVerifyEligibility()}
                     >
-                      {verifyingEligibility ? "Verifying..." : "Verify eligibility"}
+                      {verifyingEligibility ? "驗證中..." : "驗證資格"}
                     </Button>
                     <span className="text-sm text-muted-foreground">
                       {eligibilityVerification
-                        ? `Status: ${eligibilityVerification.verificationStatus} (${eligibilityVerification.verificationReasonCode})`
-                        : "No eligibility verification recorded yet."}
+                        ? `驗證結果：${eligibilityVerification.verificationStatus}（${eligibilityVerification.verificationReasonCode}）`
+                        : "尚未建立資格驗證紀錄。"}
                     </span>
                   </div>
                 )}
@@ -725,7 +754,7 @@ export default function NewBooking() {
                     }))
                   }
                 />
-                <Label htmlFor="signoff-required">Signoff required</Label>
+                <Label htmlFor="signoff-required">需要簽收</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -739,21 +768,23 @@ export default function NewBooking() {
                   }
                 />
                 <Label htmlFor="expense-proof-required">
-                  Expense proof required
+                  需要報銷憑證
                 </Label>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
               <Button type="submit" disabled={saving}>
-                {saving ? "Creating..." : "Create Booking"}
+                {saving ? "送出中..." : "建立預約"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate("/booking-list")}
+                onClick={() =>
+                  isPartnerMode ? resetPartnerForm() : navigate("/booking-list")
+                }
               >
-                Cancel
+                {isPartnerMode ? "清除重填" : "取消"}
               </Button>
             </div>
           </form>
