@@ -310,9 +310,7 @@ export default function NewBooking() {
             }
           : {}),
         ...(form.costCenter.trim() ? { costCenter: form.costCenter.trim() } : {}),
-        ...(form.vehiclePreference.trim()
-          ? { vehiclePreference: form.vehiclePreference.trim() }
-          : {}),
+        vehiclePreference: form.vehiclePreference,
         ...(form.direction ? { direction: form.direction } : {}),
         ...(form.flightNo.trim() ? { flightNo: form.flightNo.trim() } : {}),
         ...(form.terminal.trim() ? { terminal: form.terminal.trim() } : {}),
