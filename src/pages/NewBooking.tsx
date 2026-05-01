@@ -265,6 +265,16 @@ export default function NewBooking() {
       return;
     }
 
+    if (form.vehiclePreference === "autonomous") {
+      const confirmed = window.confirm(
+        "您選擇了自駕車服務。\n\n" +
+        "請注意：若路線不適合自駕車（如山區、工地、特殊限制區域），" +
+        "系統可能改派人類司機，但仍會保留優惠折扣。\n\n" +
+        "確定要繼續預約嗎？"
+      );
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     try {
       const command: CreateTenantBookingCommand = {
