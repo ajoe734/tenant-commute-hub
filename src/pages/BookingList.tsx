@@ -187,6 +187,7 @@ export default function BookingList() {
                 <TableHead>Passenger</TableHead>
                 <TableHead>Pickup</TableHead>
                 <TableHead>Dropoff</TableHead>
+                <TableHead>車輛類型</TableHead>
                 <TableHead>Window</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -211,6 +212,9 @@ export default function BookingList() {
                   <TableCell>{booking.passenger.name}</TableCell>
                   <TableCell>{booking.pickup.address}</TableCell>
                   <TableCell>{booking.dropoff.address}</TableCell>
+                  <TableCell>
+                    <VehiclePreferenceCell value={booking.vehiclePreference} />
+                  </TableCell>
                   <TableCell>
                     {formatDateTime(booking.reservationWindowStart)}
                   </TableCell>
