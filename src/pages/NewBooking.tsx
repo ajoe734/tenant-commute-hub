@@ -7,11 +7,13 @@ import type {
   TenantPassengerRecord,
 } from "@drts/contracts";
 import { BUSINESS_DISPATCH_SUBTYPES } from "@drts/contracts";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -28,7 +30,10 @@ import {
   partnerAccentStyle,
 } from "@/lib/drtsApi";
 import { toDatetimeLocalValue, toErrorMessage } from "@/lib/formatting";
+import { Info, User, Car, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
+
+type VehiclePreferenceValue = "human_driver" | "autonomous" | "no_preference";
 
 interface BookingFormState {
   passengerId: string;
