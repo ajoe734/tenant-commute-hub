@@ -54,6 +54,43 @@ interface BookingFormState {
   expenseProofRequired: boolean;
 }
 
+function eligibilityStatusToLabel(
+  status: PartnerEligibilityVerificationRecord["verificationStatus"],
+): string {
+  switch (status) {
+    case "eligible":
+      return "已通過";
+    case "ineligible":
+      return "未通過";
+    case "manual_review":
+      return "待人工審核";
+    default:
+      return status;
+  }
+}
+
+function eligibilityReasonToLabel(reasonCode: string): string {
+  switch (reasonCode) {
+    case "ELIGIBILITY_NOT_REQUIRED":
+      return "此合作入口不需要額外資格驗證。";
+    case "REFERENCE_ACCEPTED":
+      return "合作方案識別碼已驗證成功。";
+    case "CARD_PROGRAM_NOT_ELIGIBLE":
+    case "CARD_NOT_ELIGIBLE":
+      return "此卡別不符合合作方案資格。";
+    case "ISSUER_TIMEOUT":
+      return "發卡方驗證逾時，請稍後再試。";
+    case "ISSUER_RETRY_EXHAUSTED_REVIEW_REQUIRED":
+      return "系統已多次重試驗證，需由營運人工覆核。";
+    case "DENIAL_CONFIRMED_BY_REVIEW":
+      return "營運已確認此筆資格不通過。";
+    case "OFFLINE_ISSUER_CONFIRMATION_RECEIVED":
+      return "已收到人工覆核確認，可繼續建立預約。";
+    default:
+      return "資格驗證已完成，請依結果繼續操作。";
+  }
+}
+
 function defaultForm(): BookingFormState {
   const start = new Date();
   start.setHours(start.getHours() + 1, 0, 0, 0);
@@ -154,6 +191,15 @@ export default function NewBooking() {
     () => new Map(addresses.map((address) => [address.addressId, address])),
     [addresses],
   );
+  const selectedPassenger = form.passengerId
+    ? passengerLookup.get(form.passengerId) ?? null
+    : null;
+  const selectedPickupAddress = form.pickupAddressId
+    ? addressLookup.get(form.pickupAddressId) ?? null
+    : null;
+  const selectedDropoffAddress = form.dropoffAddressId
+    ? addressLookup.get(form.dropoffAddressId) ?? null
+    : null;
   const eligibilityRequired =
     partnerEntry?.eligibilityMode !== undefined &&
     partnerEntry.eligibilityMode !== "none";
@@ -270,6 +316,13 @@ export default function NewBooking() {
         dropoff: {
           address: form.dropoffAddress.trim(),
         },
+        ...(passenger.passengerId ? { passengerId: passenger.passengerId } : {}),
+        ...(form.pickupAddressId.trim()
+          ? { pickupAddressId: form.pickupAddressId.trim() }
+          : {}),
+        ...(form.dropoffAddressId.trim()
+          ? { dropoffAddressId: form.dropoffAddressId.trim() }
+          : {}),
         reservationWindowStart: new Date(
           form.reservationWindowStart,
         ).toISOString(),
@@ -397,6 +450,15 @@ export default function NewBooking() {
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedPassenger && (
+                  <div className="text-xs text-muted-foreground">
+                    主檔角色：{(selectedPassenger.roles ?? ["passenger"]).join(" / ")}
+                    {selectedPassenger.qualityIssues &&
+                    selectedPassenger.qualityIssues.length > 0
+                      ? `；資料提醒：${selectedPassenger.qualityIssues.join(" / ")}`
+                      : ""}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>派遣子類型</Label>
@@ -451,11 +513,20 @@ export default function NewBooking() {
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
+                      pickupAddressId: "",
                       pickupAddress: event.target.value,
                     }))
                   }
                   placeholder="輸入上車地址"
                 />
+                {selectedPickupAddress && (
+                  <div className="text-xs text-muted-foreground">
+                    已套用主檔地址 `{selectedPickupAddress.addressName}`。
+                    {(selectedPickupAddress.sensitiveFlag ?? false)
+                      ? " 此地址標記為 sensitive。"
+                      : ""}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>下車常用地址</Label>
@@ -482,11 +553,20 @@ export default function NewBooking() {
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
+                      dropoffAddressId: "",
                       dropoffAddress: event.target.value,
                     }))
                   }
                   placeholder="輸入下車地址"
                 />
+                {selectedDropoffAddress && (
+                  <div className="text-xs text-muted-foreground">
+                    已套用主檔地址 `{selectedDropoffAddress.addressName}`。
+                    {(selectedDropoffAddress.sensitiveFlag ?? false)
+                      ? " 此地址標記為 sensitive。"
+                      : ""}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -732,11 +812,26 @@ export default function NewBooking() {
                     >
                       {verifyingEligibility ? "驗證中..." : "驗證資格"}
                     </Button>
-                    <span className="text-sm text-muted-foreground">
-                      {eligibilityVerification
-                        ? `驗證結果：${eligibilityVerification.verificationStatus}（${eligibilityVerification.verificationReasonCode}）`
-                        : "尚未建立資格驗證紀錄。"}
-                    </span>
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      <p>
+                        {eligibilityVerification
+                          ? `驗證結果：${eligibilityStatusToLabel(eligibilityVerification.verificationStatus)}`
+                          : "尚未建立資格驗證紀錄。"}
+                      </p>
+                      {eligibilityVerification ? (
+                        <>
+                          <p>
+                            {eligibilityReasonToLabel(
+                              eligibilityVerification.verificationReasonCode,
+                            )}
+                          </p>
+                          <p className="text-xs">
+                            診斷代碼：
+                            {eligibilityVerification.verificationReasonCode}
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                 )}
               </div>

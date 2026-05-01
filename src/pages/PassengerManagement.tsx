@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import type {
-  TenantPassengerRecord,
-  UpsertTenantPassengerCommand,
+import {
+  TENANT_PASSENGER_MASTER_ROLES,
+  type TenantPassengerMasterRole,
+  type TenantPassengerQualityIssue,
+  type TenantPassengerRecord,
+  type UpsertTenantPassengerCommand,
 } from "@drts/contracts";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,8 +31,22 @@ interface PassengerFormState {
   departmentName: string;
   mobile: string;
   email: string;
+  roles: TenantPassengerMasterRole[];
   activeFlag: boolean;
 }
+
+const PASSENGER_ROLE_LABELS: Record<TenantPassengerMasterRole, string> = {
+  passenger: "乘客",
+  employee: "員工",
+  cardholder: "持卡人",
+  vip: "VIP",
+};
+
+const PASSENGER_QUALITY_LABELS: Record<TenantPassengerQualityIssue, string> = {
+  missing_contact: "缺少聯絡方式",
+  missing_employee_no: "員工缺少員編",
+  duplicate_employee_no: "員編重複",
+};
 
 const EMPTY_FORM: PassengerFormState = {
   fullName: "",
@@ -35,6 +54,7 @@ const EMPTY_FORM: PassengerFormState = {
   departmentName: "",
   mobile: "",
   email: "",
+  roles: ["passenger"],
   activeFlag: true,
 };
 
@@ -46,6 +66,10 @@ function toFormState(passenger: TenantPassengerRecord): PassengerFormState {
     departmentName: passenger.departmentName ?? "",
     mobile: passenger.mobile ?? "",
     email: passenger.email ?? "",
+    roles:
+      passenger.roles && passenger.roles.length > 0
+        ? [...passenger.roles]
+        : ["passenger"],
     activeFlag: passenger.activeFlag,
   };
 }
@@ -65,6 +89,18 @@ export default function PassengerManagement() {
       ),
     [passengers],
   );
+
+  const toggleRole = (role: TenantPassengerMasterRole, checked: boolean) => {
+    setForm((current) => {
+      const nextRoles = checked
+        ? [...new Set([...current.roles, role])]
+        : current.roles.filter((candidate) => candidate !== role);
+      return {
+        ...current,
+        roles: nextRoles.length > 0 ? nextRoles : ["passenger"],
+      };
+    });
+  };
 
   useEffect(() => {
     if (!client) {
@@ -117,6 +153,7 @@ export default function PassengerManagement() {
           : {}),
         ...(form.mobile.trim() ? { mobile: form.mobile.trim() } : {}),
         ...(form.email.trim() ? { email: form.email.trim() } : {}),
+        roles: form.roles,
         activeFlag: form.activeFlag,
       };
       await client.upsertPassenger(command);
@@ -146,6 +183,7 @@ export default function PassengerManagement() {
         departmentName: passenger.departmentName,
         mobile: passenger.mobile,
         email: passenger.email,
+        roles: passenger.roles,
         activeFlag: false,
       });
       setPassengers(await client.listPassengers());
@@ -223,6 +261,25 @@ export default function PassengerManagement() {
               }
             />
           </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>治理角色</Label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {TENANT_PASSENGER_MASTER_ROLES.map((role) => (
+                <label
+                  key={role}
+                  className="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2 text-sm"
+                >
+                  <Checkbox
+                    checked={form.roles.includes(role)}
+                    onCheckedChange={(checked) =>
+                      toggleRole(role, checked === true)
+                    }
+                  />
+                  <span>{PASSENGER_ROLE_LABELS[role]}</span>
+                </label>
+              ))}
+            </div>
+          </div>
           <div className="flex items-end gap-3">
             <Button type="submit" disabled={saving}>
               {form.passengerId ? "Save Changes" : "Create Passenger"}
@@ -250,6 +307,8 @@ export default function PassengerManagement() {
                 <TableHead>Department</TableHead>
                 <TableHead>Mobile</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Roles</TableHead>
+                <TableHead>Quality</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Updated</TableHead>
                 <TableHead>Actions</TableHead>
@@ -263,6 +322,32 @@ export default function PassengerManagement() {
                   <TableCell>{passenger.departmentName ?? "—"}</TableCell>
                   <TableCell>{passenger.mobile ?? "—"}</TableCell>
                   <TableCell>{passenger.email ?? "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {(passenger.roles && passenger.roles.length > 0
+                        ? passenger.roles
+                        : ["passenger"]
+                      ).map((role) => (
+                        <Badge key={role} variant="secondary">
+                          {PASSENGER_ROLE_LABELS[role]}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {passenger.qualityIssues &&
+                      passenger.qualityIssues.length > 0 ? (
+                        passenger.qualityIssues.map((issue) => (
+                          <Badge key={issue} variant="outline">
+                            {PASSENGER_QUALITY_LABELS[issue]}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">OK</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>{passenger.activeFlag ? "Active" : "Inactive"}</TableCell>
                   <TableCell>{formatDateTime(passenger.updatedAt)}</TableCell>
                   <TableCell>

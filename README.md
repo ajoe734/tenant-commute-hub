@@ -80,6 +80,10 @@ npm run sync:contracts
 If the core repo is not in the default sibling path, set
 `DRTS_CORE_REPO_PATH=/path/to/drts-fleet-platform` before running the sync.
 
+Breaking or behavior-tightening contract changes must carry a compatibility
+note from the core repo authority docs before they are treated as ready for
+consumer rollout. Do not hand-edit `src/lib/drts-shim/generated/*`.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!

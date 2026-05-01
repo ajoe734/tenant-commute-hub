@@ -11,8 +11,10 @@ import type {
   NotificationRecord,
   PartnerChannelEntryRecord,
   PartnerEligibilityVerificationRecord,
+  PlatformAdminTenantRecord,
   ReportJobRecord,
   RotateTenantApiKeyCommand,
+  TenantAddressExportViewRecord,
   TenantAddressRecord,
   TenantApiKeyIssued,
   TenantApiKeyRecord,
@@ -284,6 +286,12 @@ export class ApiClient {
     return this.getList<TenantAddressRecord>("/api/tenant/addresses");
   }
 
+  async listAddressExportView(): Promise<TenantAddressExportViewRecord[]> {
+    return this.getList<TenantAddressExportViewRecord>(
+      "/api/tenant/addresses/export-view",
+    );
+  }
+
   async upsertAddress(command: UpsertTenantAddressCommand) {
     return this.post("/api/tenant/addresses", { body: command });
   }
@@ -369,6 +377,14 @@ export class ApiClient {
 
   async listTenantRoles(): Promise<TenantRoleCatalogRecord[]> {
     return this.getList<TenantRoleCatalogRecord>("/api/tenant/roles");
+  }
+
+  async getPlatformTenant(
+    tenantId: string,
+  ): Promise<PlatformAdminTenantRecord> {
+    return this.get<PlatformAdminTenantRecord>(
+      `/api/platform-admin/tenants/${encodeURIComponent(tenantId)}`,
+    );
   }
 
   async createTenantUser(command: CreateTenantUserCommand) {

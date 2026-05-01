@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import type {
-  TenantAddressRecord,
-  UpsertTenantAddressCommand,
+import {
+  TENANT_ADDRESS_GEOCODE_SOURCES,
+  type TenantAddressExportViewRecord,
+  type TenantAddressGeocodeSource,
+  type TenantAddressRecord,
+  type UpsertTenantAddressCommand,
 } from "@drts/contracts";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -33,16 +38,31 @@ interface AddressFormState {
   addressText: string;
   lat: string;
   lng: string;
+  geocodeSource: TenantAddressGeocodeSource;
+  sensitiveFlag: boolean;
   tags: string;
   ownerPassengerId: string;
   activeFlag: boolean;
 }
+
+const GEOCODE_SOURCE_LABELS: Record<TenantAddressGeocodeSource, string> = {
+  none: "未定位",
+  manual: "人工定位",
+  provider: "供應商定位",
+};
+
+const ADDRESS_QUALITY_LABELS: Record<string, string> = {
+  missing_geocode: "缺少座標",
+  duplicate_normalized_address: "標準化地址重複",
+};
 
 const EMPTY_FORM: AddressFormState = {
   addressName: "",
   addressText: "",
   lat: "",
   lng: "",
+  geocodeSource: "none",
+  sensitiveFlag: false,
   tags: "",
   ownerPassengerId: "",
   activeFlag: true,
@@ -55,6 +75,8 @@ function toFormState(address: TenantAddressRecord): AddressFormState {
     addressText: address.addressText,
     lat: address.lat != null ? String(address.lat) : "",
     lng: address.lng != null ? String(address.lng) : "",
+    geocodeSource: address.geocodeSource ?? "none",
+    sensitiveFlag: address.sensitiveFlag ?? false,
     tags: address.tags.join(", "),
     ownerPassengerId: address.ownerPassengerId ?? "",
     activeFlag: address.activeFlag,
@@ -64,6 +86,9 @@ function toFormState(address: TenantAddressRecord): AddressFormState {
 export default function AddressManagement() {
   const { client } = useAuth();
   const [addresses, setAddresses] = useState<TenantAddressRecord[]>([]);
+  const [addressExportView, setAddressExportView] = useState<
+    TenantAddressExportViewRecord[]
+  >([]);
   const [form, setForm] = useState<AddressFormState>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -76,6 +101,13 @@ export default function AddressManagement() {
       ),
     [addresses],
   );
+  const exportViewById = useMemo(
+    () =>
+      new Map(
+        addressExportView.map((address) => [address.addressId, address]),
+      ),
+    [addressExportView],
+  );
 
   useEffect(() => {
     if (!client) {
@@ -86,11 +118,15 @@ export default function AddressManagement() {
     const load = async () => {
       setLoading(true);
       try {
-        const nextAddresses = await client.listAddresses();
+        const [nextAddresses, nextAddressExportView] = await Promise.all([
+          client.listAddresses(),
+          client.listAddressExportView(),
+        ]);
         if (!active) {
           return;
         }
         setAddresses(nextAddresses);
+        setAddressExportView(nextAddressExportView);
         setError(null);
       } catch (loadError) {
         if (!active) {
@@ -111,6 +147,18 @@ export default function AddressManagement() {
     };
   }, [client]);
 
+  const reloadAddresses = async () => {
+    if (!client) {
+      return;
+    }
+    const [nextAddresses, nextAddressExportView] = await Promise.all([
+      client.listAddresses(),
+      client.listAddressExportView(),
+    ]);
+    setAddresses(nextAddresses);
+    setAddressExportView(nextAddressExportView);
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!client) {
@@ -128,12 +176,14 @@ export default function AddressManagement() {
         ...(form.ownerPassengerId.trim()
           ? { ownerPassengerId: form.ownerPassengerId.trim() }
           : {}),
+        sensitiveFlag: form.sensitiveFlag,
+        geocodeSource: form.geocodeSource,
         tags: splitCommaSeparated(form.tags),
         activeFlag: form.activeFlag,
       };
 
       await client.upsertAddress(command);
-      setAddresses(await client.listAddresses());
+      await reloadAddresses();
       setForm(EMPTY_FORM);
       toast.success(form.addressId ? "Address updated." : "Address created.");
     } catch (submitError) {
@@ -158,10 +208,12 @@ export default function AddressManagement() {
         addressText: address.addressText,
         lat: address.lat,
         lng: address.lng,
+        sensitiveFlag: address.sensitiveFlag ?? false,
+        geocodeSource: address.geocodeSource ?? "none",
         tags: address.tags,
         activeFlag: false,
       });
-      setAddresses(await client.listAddresses());
+      await reloadAddresses();
       toast.success("Address deactivated.");
     } catch (deactivateError) {
       toast.error(toErrorMessage(deactivateError));
@@ -242,6 +294,43 @@ export default function AddressManagement() {
               }
             />
           </div>
+          <div className="space-y-2">
+            <Label>Geocode source</Label>
+            <Select
+              value={form.geocodeSource}
+              onValueChange={(geocodeSource) =>
+                setForm((current) => ({
+                  ...current,
+                  geocodeSource:
+                    geocodeSource as TenantAddressGeocodeSource,
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TENANT_ADDRESS_GEOCODE_SOURCES.map((source) => (
+                  <SelectItem key={source} value={source}>
+                    {GEOCODE_SOURCE_LABELS[source]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-3">
+            <Checkbox
+              id="address-sensitive-flag"
+              checked={form.sensitiveFlag}
+              onCheckedChange={(checked) =>
+                setForm((current) => ({
+                  ...current,
+                  sensitiveFlag: checked === true,
+                }))
+              }
+            />
+            <Label htmlFor="address-sensitive-flag">Sensitive address</Label>
+          </div>
           <div className="space-y-2 md:col-span-2">
             <Label>Tags</Label>
             <Input
@@ -275,9 +364,11 @@ export default function AddressManagement() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Address</TableHead>
+                <TableHead>Master Address</TableHead>
+                <TableHead>Export View</TableHead>
                 <TableHead>Tags</TableHead>
-                <TableHead>Coordinates</TableHead>
+                <TableHead>Governance</TableHead>
+                <TableHead>Quality</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Updated</TableHead>
                 <TableHead>Actions</TableHead>
@@ -288,11 +379,60 @@ export default function AddressManagement() {
                 <TableRow key={address.addressId}>
                   <TableCell>{address.addressName}</TableCell>
                   <TableCell>{address.addressText}</TableCell>
-                  <TableCell>{address.tags.join(", ") || "—"}</TableCell>
                   <TableCell>
-                    {address.lat != null && address.lng != null
-                      ? `${address.lat}, ${address.lng}`
-                      : "—"}
+                    {exportViewById.get(address.addressId)?.maskedAddressText ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    {address.tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {address.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {(address.sensitiveFlag ??
+                      exportViewById.get(address.addressId)?.sensitiveFlag)
+                        ? (
+                          <Badge variant="destructive">Sensitive</Badge>
+                        )
+                        : null}
+                      <Badge variant="outline">
+                        {
+                          GEOCODE_SOURCE_LABELS[
+                            exportViewById.get(address.addressId)?.geocodeSource ??
+                              address.geocodeSource ??
+                              "none"
+                          ]
+                        }
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {(exportViewById.get(address.addressId)?.qualityIssues ??
+                        address.qualityIssues ??
+                        []
+                      ).length > 0 ? (
+                        (
+                          exportViewById.get(address.addressId)?.qualityIssues ??
+                          address.qualityIssues ??
+                          []
+                        ).map((issue) => (
+                          <Badge key={issue} variant="outline">
+                            {ADDRESS_QUALITY_LABELS[issue] ?? issue}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">OK</span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>{address.activeFlag ? "Active" : "Inactive"}</TableCell>
                   <TableCell>{formatDateTime(address.updatedAt)}</TableCell>

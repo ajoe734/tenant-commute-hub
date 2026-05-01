@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   CreateTenantUserCommand,
+  PlatformAdminTenantRecord,
   TenantRoleCatalogRecord,
   TenantUserRoleRecord,
   TenantUserRoleStatus,
@@ -45,11 +46,13 @@ interface InviteFormState {
 const STATUSES: TenantUserRoleStatus[] = ["invited", "active", "suspended"];
 
 export default function AdminPanel() {
-  const { client } = useAuth();
+  const { client, profile } = useAuth();
   const { isAdmin } = useUserRole();
   const [users, setUsers] = useState<TenantUserRoleRecord[]>([]);
   const [roleCatalog, setRoleCatalog] = useState<TenantRoleCatalogRecord[]>([]);
   const [drafts, setDrafts] = useState<Record<string, UserDraft>>({});
+  const [tenantProfile, setTenantProfile] =
+    useState<PlatformAdminTenantRecord | null>(null);
   const [inviteForm, setInviteForm] = useState<InviteFormState>({
     email: "",
     displayName: "",
@@ -83,9 +86,12 @@ export default function AdminPanel() {
     const load = async () => {
       setLoading(true);
       try {
-        const [nextUsers, nextRoleCatalog] = await Promise.all([
+        const [nextUsers, nextRoleCatalog, nextTenantProfile] = await Promise.all([
           client.listTenantUsers(),
           client.listTenantRoles(),
+          profile?.tenant_id
+            ? client.getPlatformTenant(profile.tenant_id)
+            : Promise.resolve(null),
         ]);
         if (!active) {
           return;
@@ -107,6 +113,7 @@ export default function AdminPanel() {
           ...current,
           roleCode: nextRoleCatalog[0]?.roleCode ?? current.roleCode,
         }));
+        setTenantProfile(nextTenantProfile);
         setError(null);
       } catch (loadError) {
         if (!active) {
@@ -125,14 +132,20 @@ export default function AdminPanel() {
     return () => {
       active = false;
     };
-  }, [client, isAdmin]);
+  }, [client, isAdmin, profile?.tenant_id]);
 
   const refreshUsers = async () => {
     if (!client) {
       return;
     }
-    const nextUsers = await client.listTenantUsers();
+    const [nextUsers, nextTenantProfile] = await Promise.all([
+      client.listTenantUsers(),
+      profile?.tenant_id
+        ? client.getPlatformTenant(profile.tenant_id)
+        : Promise.resolve(null),
+    ]);
     setUsers(nextUsers);
+    setTenantProfile(nextTenantProfile);
     setDrafts(
       Object.fromEntries(
         nextUsers.map((user) => [
@@ -221,6 +234,69 @@ export default function AdminPanel() {
           {error}
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tenant onboarding status</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {tenantProfile ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-lg border p-4">
+                  <div className="text-sm text-muted-foreground">Rollout stage</div>
+                  <div className="mt-2 font-medium">{tenantProfile.rollout.stage}</div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <div className="text-sm text-muted-foreground">Integration mode</div>
+                  <div className="mt-2 font-medium">
+                    {tenantProfile.integrationPackage.mode}
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <div className="text-sm text-muted-foreground">Rollback plan</div>
+                  <div className="mt-2 font-medium">
+                    {tenantProfile.rollout.rollbackPrepared ? "Prepared" : "Pending"}
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <div className="font-medium">Billing baseline</div>
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    <div>{tenantProfile.bootstrapDefaults.billingBaseline.invoiceTitle}</div>
+                    <div>{tenantProfile.bootstrapDefaults.billingBaseline.contactName}</div>
+                    <div>{tenantProfile.bootstrapDefaults.billingBaseline.email}</div>
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <div className="font-medium">Default roles</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
+                    {tenantProfile.bootstrapDefaults.roleDefaults.map((role) => (
+                      <span
+                        key={role.roleCode}
+                        className="rounded-full border px-3 py-1"
+                      >
+                        {role.displayName}
+                        {role.required ? " · required" : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                <div>Cutover owner: {tenantProfile.rollout.cutoverOwner ?? "—"}</div>
+                <div>Rollback owner: {tenantProfile.rollout.rollbackOwner ?? "—"}</div>
+                <div>Notes: {tenantProfile.rollout.notes ?? "—"}</div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              Tenant onboarding profile is not available yet.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
