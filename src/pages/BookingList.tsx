@@ -23,7 +23,33 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDateTime, toErrorMessage } from "@/lib/formatting";
+import { User, Car, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
+
+const VEHICLE_PREF_MAP: Record<string, { label: string; icon: typeof User; colorClass: string }> = {
+  human_driver: { label: "人類司機", icon: User, colorClass: "text-blue-600" },
+  autonomous: { label: "自駕車", icon: Car, colorClass: "text-green-600" },
+  no_preference: { label: "無偏好", icon: HelpCircle, colorClass: "text-muted-foreground" },
+};
+
+function VehiclePreferenceCell({ value }: { value: string | null }) {
+  const entry = value ? VEHICLE_PREF_MAP[value] : null;
+  if (!entry) return <span className="text-muted-foreground">—</span>;
+  const Icon = entry.icon;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-flex items-center gap-1.5 ${entry.colorClass}`}>
+            <Icon className="h-4 w-4" />
+            <span className="text-sm">{entry.label}</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>偏好用車：{entry.label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 function badgeVariant(status: OwnedOrderStatus) {
   if (status === "completed") {
