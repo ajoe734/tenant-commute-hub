@@ -49,7 +49,7 @@ interface BookingFormState {
   onsiteContactName: string;
   onsiteContactPhone: string;
   costCenter: string;
-  vehiclePreference: string;
+  vehiclePreference: VehiclePreferenceValue;
   direction: "pickup" | "dropoff";
   flightNo: string;
   terminal: string;
@@ -78,7 +78,7 @@ function defaultForm(): BookingFormState {
     onsiteContactName: "",
     onsiteContactPhone: "",
     costCenter: "",
-    vehiclePreference: "",
+    vehiclePreference: "no_preference",
     direction: "pickup",
     flightNo: "",
     terminal: "",
