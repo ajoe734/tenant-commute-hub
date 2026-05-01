@@ -595,16 +595,63 @@ export default function NewBooking() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>車型偏好</Label>
-                <Input
+                <Label>偏好用車類型 *</Label>
+                <RadioGroup
                   value={form.vehiclePreference}
-                  onChange={(event) =>
+                  onValueChange={(value: VehiclePreferenceValue) =>
                     setForm((current) => ({
                       ...current,
-                      vehiclePreference: event.target.value,
+                      vehiclePreference: value,
                     }))
                   }
-                />
+                  className="flex flex-col space-y-2"
+                >
+                  <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-accent transition-colors">
+                    <RadioGroupItem value="human_driver" id="vp_human" />
+                    <Label htmlFor="vp_human" className="flex-1 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        <span className="font-medium">人類司機</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        由專業司機服務，適合需要協助搬運或特殊需求
+                      </p>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-accent transition-colors">
+                    <RadioGroupItem value="autonomous" id="vp_auto" />
+                    <Label htmlFor="vp_auto" className="flex-1 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <Car className="h-4 w-4" />
+                        <span className="font-medium">自駕車</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        智能自動駕駛車輛，環保且可能享有折扣優惠
+                      </p>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-accent transition-colors">
+                    <RadioGroupItem value="no_preference" id="vp_none" />
+                    <Label htmlFor="vp_none" className="flex-1 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <HelpCircle className="h-4 w-4" />
+                        <span className="font-medium">無偏好</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        系統自動分配最佳車輛類型
+                      </p>
+                    </Label>
+                  </div>
+                </RadioGroup>
+
+                {form.vehiclePreference === "autonomous" && (
+                  <Alert className="mt-2 border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-800 dark:text-blue-300">
+                      自駕車服務可享 <strong>9折優惠</strong>。若您的路線不適合自駕車（如特殊地形、施工路段），系統可能改派人類司機。
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             </div>
 
