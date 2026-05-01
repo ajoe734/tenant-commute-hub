@@ -1,15 +1,24 @@
 {
   "files": [],
   "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
   ],
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@drts/api-client": ["./src/lib/drts-shim/api-client.ts"],
-      "@drts/contracts": ["./src/lib/drts-shim/contracts.ts"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@drts/api-client": [
+        "./src/lib/drts-shim/api-client.ts"
+      ],
+      "@drts/contracts": [
+        "./src/lib/drts-shim/contracts.ts"
+      ]
     },
     "noImplicitAny": false,
     "noUnusedParameters": false,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { BookingRecord, UpdateTenantBookingCommand } from "@drts/contracts";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDateTime, toErrorMessage } from "@/lib/formatting";
+import { User, Car, HelpCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+
+const VEHICLE_LABELS: Record<string, { label: string; icon: typeof User }> = {
+  human_driver: { label: "人類司機", icon: User },
+  autonomous: { label: "自駕車", icon: Car },
+  no_preference: { label: "無偏好", icon: HelpCircle },
+};
 
 export default function BookingDetail() {
   const { bookingId = "" } = useParams();
@@ -182,8 +190,19 @@ export default function BookingDetail() {
             <Input value={booking.costCenter ?? ""} readOnly />
           </div>
           <div className="space-y-2">
-            <Label>Vehicle Preference</Label>
-            <Input value={booking.vehiclePreference ?? ""} readOnly />
+            <Label>偏好用車類型</Label>
+            {(() => {
+              const pref = booking.vehiclePreference;
+              const entry = pref ? VEHICLE_LABELS[pref] : null;
+              if (!entry) return <Input value={pref ?? "—"} readOnly />;
+              const Icon = entry.icon;
+              return (
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <Icon className="h-4 w-4" />
+                  <span>{entry.label}</span>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
