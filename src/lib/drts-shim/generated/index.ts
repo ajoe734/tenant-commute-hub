@@ -56,6 +56,13 @@ export const PARTNER_ENTRY_AUTH_MODES = [
 ] as const;
 export type PartnerEntryAuthMode = (typeof PARTNER_ENTRY_AUTH_MODES)[number];
 
+export const PARTNER_ENTRY_STATUSES = [
+  "active",
+  "inactive",
+  "revoked",
+] as const;
+export type PartnerEntryStatus = (typeof PARTNER_ENTRY_STATUSES)[number];
+
 export const PARTNER_ELIGIBILITY_MODES = [
   "none",
   "bank_card_inline",
@@ -289,6 +296,7 @@ export const PARTNER_ELIGIBILITY_DECISION_SOURCES = [
   "issuer_realtime",
   "issuer_reference_lookup",
   "manual_fallback",
+  "ops_manual_review",
 ] as const;
 export type PartnerEligibilityDecisionSource =
   (typeof PARTNER_ELIGIBILITY_DECISION_SOURCES)[number];
@@ -352,6 +360,35 @@ export interface PartnerEligibilityManualFallbackRecord {
   notes: string | null;
 }
 
+export interface PartnerIngressCredentialRecord {
+  keyId: string;
+  entrySlug: string;
+  keyPrefix: string;
+  maskedSuffix: string;
+  source: "env_bootstrap" | "platform_admin";
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  issuedBy: string | null;
+  revokedBy: string | null;
+  rotationReason: string | null;
+  revokeReason: string | null;
+}
+
+export interface IssuePartnerIngressCredentialCommand {
+  rotationReason?: string | null;
+}
+
+export interface RevokePartnerIngressCredentialCommand {
+  revokeReason?: string | null;
+}
+
+export interface PartnerIngressCredentialIssued {
+  credential: PartnerIngressCredentialRecord;
+  plaintextKey: string;
+  revokedCredentialId: string | null;
+}
+
 export interface PartnerChannelEntryRecord {
   partnerId: string;
   partnerCode: string;
@@ -370,8 +407,11 @@ export interface PartnerChannelEntryRecord {
   themeAccent: string | null;
   brandingMetadata: PartnerEntryBrandingMetadata | null;
   eligibilityContract: PartnerEligibilityIntegrationContractRecord | null;
-  status: "active" | "inactive";
+  status: PartnerEntryStatus;
   activeFlag: boolean;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
   createdAt: string;
   updatedAt: string;
   auditMetadata: PartnerRecordAuditMetadata;
@@ -393,7 +433,7 @@ export interface CreatePartnerChannelEntryCommand {
   entryPath?: string | null;
   themeAccent?: string | null;
   brandingMetadata?: Partial<PartnerEntryBrandingMetadata> | null;
-  status?: "active" | "inactive";
+  status?: PartnerEntryStatus;
   activeFlag?: boolean;
 }
 
@@ -412,7 +452,7 @@ export interface UpdatePartnerChannelEntryCommand {
   entryPath?: string | null;
   themeAccent?: string | null;
   brandingMetadata?: Partial<PartnerEntryBrandingMetadata> | null;
-  status?: "active" | "inactive";
+  status?: PartnerEntryStatus;
   activeFlag?: boolean;
 }
 
@@ -457,6 +497,45 @@ export interface PartnerEligibilityVerificationRecord {
   createdAt: string;
   updatedAt: string;
   auditMetadata: PartnerRecordAuditMetadata;
+}
+
+export interface PartnerEligibilityReviewQueueItem {
+  eligibilityVerificationId: string;
+  partnerEntrySlug: string;
+  verificationStatus: PartnerEligibilityStatus;
+  verificationReasonCode: string;
+  decisionSource: PartnerEligibilityDecisionSource;
+  attemptCount: number;
+  latestAttemptStatus: string | null;
+  latestAttemptReasonCode: string | null;
+  manualFallback: PartnerEligibilityManualFallbackRecord;
+  requestHints: {
+    cardLast4: string | null;
+    flightNo: string | null;
+  };
+  verifiedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PartnerEligibilityReviewDecision = "approve" | "deny";
+
+export interface ResolvePartnerEligibilityReviewCommand {
+  eligibilityVerificationId: string;
+  decision: PartnerEligibilityReviewDecision;
+  reasonCode: string;
+  notes: string | null;
+}
+
+export interface PartnerEligibilityReviewResolution {
+  eligibilityVerificationId: string;
+  previousStatus: PartnerEligibilityStatus;
+  resolvedStatus: PartnerEligibilityStatus;
+  decision: PartnerEligibilityReviewDecision;
+  reasonCode: string;
+  notes: string | null;
+  resolvedAt: string;
+  resolvedBy: string;
 }
 
 export interface RegulatoryRegistrySummary {
@@ -541,6 +620,19 @@ export interface EvidenceAccessRuleRecord {
   tenantScoped: boolean;
 }
 
+export interface EvidenceMaskingRuleRecord {
+  surface: "api_view" | "download" | "audit_log" | "storage";
+  rule: string;
+}
+
+export interface EvidenceDownloadControlRecord {
+  mode: "none" | "signed_url";
+  ttlMinutes: number | null;
+  reissueRequired: boolean;
+  requiresAuditOnIssue: boolean;
+  notes: string[];
+}
+
 export interface EvidenceLegalHoldPolicyRecord {
   supported: boolean;
   placementActors: IdentityContext["actorType"][];
@@ -558,6 +650,8 @@ export interface EvidenceRetentionPolicyRecord {
   archiveRetentionDays: number | null;
   archiveTier: EvidenceArchiveTier;
   accessRules: EvidenceAccessRuleRecord[];
+  maskingRules: EvidenceMaskingRuleRecord[];
+  downloadControl: EvidenceDownloadControlRecord | null;
   legalHold: EvidenceLegalHoldPolicyRecord;
   deletionException: string;
   auditAction: string;
@@ -569,6 +663,123 @@ export interface EvidenceGovernanceCatalog {
   generatedAt: string;
   policies: EvidenceRetentionPolicyRecord[];
   legalHoldWorkflow: string[];
+}
+
+export const EVIDENCE_LEGAL_HOLD_REASON_CODES = [
+  "complaint_escalation",
+  "regulatory_inquiry",
+  "settlement_dispute",
+  "internal_investigation",
+] as const;
+export type EvidenceLegalHoldReasonCode =
+  (typeof EVIDENCE_LEGAL_HOLD_REASON_CODES)[number];
+
+export const EVIDENCE_LEGAL_HOLD_STATUSES = ["active", "released"] as const;
+export type EvidenceLegalHoldStatus =
+  (typeof EVIDENCE_LEGAL_HOLD_STATUSES)[number];
+
+export interface CreateEvidenceLegalHoldCommand {
+  family: EvidenceRetentionFamily;
+  subjectId: string;
+  caseNumber: string;
+  reasonCode: EvidenceLegalHoldReasonCode;
+  reasonNote?: string | null;
+  tenantId?: string | null;
+  manifestHash?: string | null;
+}
+
+export interface ReleaseEvidenceLegalHoldCommand {
+  releaseReason: string;
+}
+
+export interface EvidenceLegalHoldRecord {
+  holdId: string;
+  family: EvidenceRetentionFamily;
+  subjectId: string;
+  caseNumber: string;
+  reasonCode: EvidenceLegalHoldReasonCode;
+  reasonNote: string | null;
+  tenantId: string | null;
+  manifestHash: string | null;
+  status: EvidenceLegalHoldStatus;
+  placedByActorId: string;
+  placedByActorType: IdentityContext["actorType"];
+  placedAt: string;
+  releasedByActorId: string | null;
+  releasedByActorType: IdentityContext["actorType"] | null;
+  releasedAt: string | null;
+  releaseReason: string | null;
+}
+
+export const EVIDENCE_DELETION_EXCEPTION_REASON_CODES = [
+  "filing_reference",
+  "complaint_reference",
+  "settlement_dispute",
+  "regulatory_request",
+  "webhook_disablement",
+  "eligibility_dispute",
+  "manual_preservation",
+] as const;
+export type EvidenceDeletionExceptionReasonCode =
+  (typeof EVIDENCE_DELETION_EXCEPTION_REASON_CODES)[number];
+
+export const EVIDENCE_DELETION_EXCEPTION_STATUSES = [
+  "active",
+  "resolved",
+  "expired",
+] as const;
+export type EvidenceDeletionExceptionStatus =
+  (typeof EVIDENCE_DELETION_EXCEPTION_STATUSES)[number];
+
+export interface CreateEvidenceDeletionExceptionCommand {
+  family: EvidenceRetentionFamily;
+  subjectId: string;
+  sourceResourceType: string;
+  sourceResourceId: string;
+  reviewerActorId: string;
+  reviewerActorType?: IdentityContext["actorType"] | null;
+  expiresAt: string;
+  reasonCode: EvidenceDeletionExceptionReasonCode;
+  reasonNote?: string | null;
+  tenantId?: string | null;
+  manifestHash?: string | null;
+}
+
+export interface ResolveEvidenceDeletionExceptionCommand {
+  resolutionNote: string;
+}
+
+export interface EvidenceDeletionExceptionRecord {
+  exceptionId: string;
+  family: EvidenceRetentionFamily;
+  subjectId: string;
+  sourceResourceType: string;
+  sourceResourceId: string;
+  reviewerActorId: string;
+  reviewerActorType: IdentityContext["actorType"] | null;
+  expiresAt: string;
+  reasonCode: EvidenceDeletionExceptionReasonCode;
+  reasonNote: string | null;
+  tenantId: string | null;
+  manifestHash: string | null;
+  status: EvidenceDeletionExceptionStatus;
+  requestedByActorId: string;
+  requestedByActorType: IdentityContext["actorType"];
+  requestedAt: string;
+  resolvedByActorId: string | null;
+  resolvedByActorType: IdentityContext["actorType"] | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+}
+
+export interface EvidenceSubjectGovernanceRecord {
+  family: EvidenceRetentionFamily;
+  subjectId: string;
+  tenantId: string | null;
+  manifestHash: string | null;
+  activeLegalHolds: EvidenceLegalHoldRecord[];
+  activeDeletionExceptions: EvidenceDeletionExceptionRecord[];
+  deletionSuppressed: boolean;
 }
 
 export interface NotificationRecord {
@@ -945,6 +1156,9 @@ export const OWNED_ORDER_STATUSES = [
   "cancelled",
   "redispatch_required",
   "dispatch_failed",
+  "dispatch_timeout",
+  "no_supply",
+  "delayed_queue",
   "exception_hold",
 ] as const;
 export type OwnedOrderStatus = (typeof OWNED_ORDER_STATUSES)[number];
@@ -955,6 +1169,8 @@ export const DISPATCH_JOB_STATUSES = [
   "queued",
   "assigned",
   "failed",
+  "timed_out",
+  "no_supply",
   "redispatch_required",
   "closed",
 ] as const;
@@ -1000,6 +1216,34 @@ export const RESERVATION_HOLD_STATUSES = [
   "exception_hold",
 ] as const;
 export type ReservationHoldStatus = (typeof RESERVATION_HOLD_STATUSES)[number];
+
+export const DISPATCH_QUEUE_FAMILIES = [
+  "realtime_ready_queue",
+  "reservation_confirmation_queue",
+  "redispatch_priority_queue",
+  "delayed_retry_queue",
+  "exception_hold_queue",
+  "recording_gate_queue",
+  "manual_review_queue",
+] as const;
+export type DispatchQueueFamily = (typeof DISPATCH_QUEUE_FAMILIES)[number];
+
+export const DISPATCH_QUEUE_ENTRY_REASONS = [
+  "realtime_ready_for_dispatch",
+  "reservation_confirmation_window_open",
+  "redispatch_retry_required",
+  "recording_missing_for_dispatch",
+  "dispatch_manual_review_required",
+  "dispatch_timeout_retry",
+  "no_supply_delayed_retry",
+  "no_supply_escalated_to_ops",
+  "exception_hold_no_eligible_supply",
+  "exception_hold_confirmation_window_expired",
+  "exception_hold_driver_rejected_in_window",
+  "exception_hold_manual_escalation",
+] as const;
+export type DispatchQueueEntryReason =
+  (typeof DISPATCH_QUEUE_ENTRY_REASONS)[number];
 
 // --- Queue-Entry Policy ---
 
@@ -1078,8 +1322,61 @@ export interface ExceptionHoldCriteria {
 
 export interface ResolveExceptionHoldCommand {
   resolution: "release_to_dispatch" | "cancel_order";
-  operatorId: string;
+  operatorId?: string;
   reason: string;
+  traceId: string;
+}
+
+export const OVERRIDE_REQUEST_STATUSES = [
+  "pending_approval",
+  "approved",
+  "rejected",
+  "expired",
+] as const;
+export type OverrideRequestStatus = (typeof OVERRIDE_REQUEST_STATUSES)[number];
+
+export interface RequestExceptionOverrideCommand {
+  operatorId?: string;
+  reason: string;
+  overrideType: "release_to_dispatch" | "cancel_order";
+  expiresInMinutes?: number;
+}
+
+export interface ApproveExceptionOverrideCommand {
+  operatorId?: string;
+  approvalNote: string;
+}
+
+export interface RejectExceptionOverrideCommand {
+  operatorId?: string;
+  rejectionReason: string;
+}
+
+export interface OverrideRequestRecord {
+  overrideRequestId: string;
+  orderId: string;
+  overrideType: "release_to_dispatch" | "cancel_order";
+  status: OverrideRequestStatus;
+  requestedBy: {
+    actorType: "platform_admin" | "ops_user";
+    actorId: string;
+  };
+  reason: string;
+  requestedAt: string;
+  expiresAt: string;
+  approval: {
+    actorType: "platform_admin" | "ops_user";
+    actorId: string;
+    approvalNote: string;
+    approvedAt: string;
+  } | null;
+  rejection: {
+    actorType: "platform_admin" | "ops_user";
+    actorId: string;
+    rejectionReason: string;
+    rejectedAt: string;
+  } | null;
+  expiredAt: string | null;
 }
 
 export interface AddressPayload {
@@ -1308,6 +1605,28 @@ export interface ManualFareOverrideRecord {
   overriddenAt: string;
 }
 
+export interface ExceptionHoldResolutionRecord {
+  resolution: ResolveExceptionHoldCommand["resolution"];
+  actorType: "platform_admin" | "ops_user";
+  actorId: string;
+  reason: string;
+  traceId: string;
+  resolvedAt: string;
+  downstreamReviewerLabels: string[];
+  downstreamStages: ComplianceImpactStage[];
+}
+
+export interface ExceptionHoldRecord {
+  reasonCode: ExceptionHoldReasonCode;
+  dispatchJobId: string | null;
+  raisedAt: string;
+  criteria: ExceptionHoldCriteria;
+  overrideAllowed: boolean;
+  overrideActors: ("platform_admin" | "ops_user")[];
+  resolution: ExceptionHoldResolutionRecord | null;
+  overrideRequest: OverrideRequestRecord | null;
+}
+
 export interface ApplyManualFareOverrideCommand {
   fare: MoneyAmount;
   reason: string;
@@ -1325,8 +1644,19 @@ export interface AssignDispatchCommand {
   driverId: string;
 }
 
+export interface ReassignDispatchCommand {
+  dispatchJobId: string;
+  vehicleId: string;
+  driverId: string;
+  reasonCode: string;
+  reasonNote?: string;
+}
+
 export interface RedispatchOrderCommand {
   reasonCode: string;
+  reasonNote?: string;
+  operatorId?: string;
+  escalationTarget?: "ops_supervisor" | "dispatch_manager" | null;
 }
 
 export interface CancelOwnedOrderCommand {
@@ -1425,6 +1755,7 @@ export interface OwnedOrderRecord {
   quotedFareSource: QuotedFareSource | null;
   quotedFareRuleVersion: string | null;
   manualFareOverride: ManualFareOverrideRecord | null;
+  exceptionHold: ExceptionHoldRecord | null;
   proofRequirements: {
     minPhotoCount: number;
     signoffRequired: boolean;
@@ -1437,6 +1768,12 @@ export interface OwnedOrderRecord {
   reservationHoldStatus: ReservationHoldStatus;
   reservationHoldId: string | null;
   reservationHoldExpiresAt: string | null;
+  queueFamily?: DispatchQueueFamily | null;
+  queueEntryReason?: DispatchQueueEntryReason | null;
+  dispatchAttemptCount: number;
+  lastDispatchFailureReason: string | null;
+  noSupplyEscalation: NoSupplyEscalationRecord | null;
+  dispatchTimeout: DispatchTimeoutRecord | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1494,7 +1831,17 @@ export interface DispatchCandidate {
   operatingArea: string;
   serviceBuckets: Phase1ServiceBucket[];
   etaMinutes: number;
+  locationState?: DispatchCandidateLocationState;
+  currentLocation?: DriverLocationSnapshot | null;
 }
+
+export const DISPATCH_CANDIDATE_LOCATION_STATES = [
+  "live",
+  "stale",
+  "no_location",
+] as const;
+export type DispatchCandidateLocationState =
+  (typeof DISPATCH_CANDIDATE_LOCATION_STATES)[number];
 
 export interface DispatchJobRecord {
   dispatchJobId: string;
@@ -1511,9 +1858,71 @@ export interface DispatchAttemptRecord {
   dispatchJobId: string;
   orderId: string;
   sequence: number;
-  outcome: "candidate_found" | "assigned" | "rejected" | "failed";
+  outcome:
+    | "candidate_found"
+    | "assigned"
+    | "reassigned"
+    | "rejected"
+    | "timed_out"
+    | "no_supply"
+    | "failed";
   reasonCode: string | null;
   createdAt: string;
+}
+
+// --- Redispatch / Reassign Reason Codes ---
+
+export const REDISPATCH_REASON_CODES = [
+  "operator_redispatch",
+  "driver_rejected",
+  "dispatch_timeout",
+  "no_supply_available",
+  "vehicle_became_unavailable",
+  "customer_request",
+  "system_redispatch",
+] as const;
+export type RedispatchReasonCode = (typeof REDISPATCH_REASON_CODES)[number];
+
+export const REASSIGN_REASON_CODES = [
+  "operator_reassign",
+  "driver_unavailable",
+  "vehicle_swap",
+  "customer_request",
+  "load_balancing",
+] as const;
+export type ReassignReasonCode = (typeof REASSIGN_REASON_CODES)[number];
+
+// --- No-Supply Escalation ---
+
+export const NO_SUPPLY_ESCALATION_ACTIONS = [
+  "retry_dispatch",
+  "expand_search_radius",
+  "escalate_to_ops",
+  "move_to_delayed_queue",
+  "cancel_with_notification",
+] as const;
+export type NoSupplyEscalationAction =
+  (typeof NO_SUPPLY_ESCALATION_ACTIONS)[number];
+
+export interface NoSupplyEscalationRecord {
+  orderId: string;
+  dispatchJobId: string;
+  attemptCount: number;
+  lastAttemptAt: string;
+  escalationAction: NoSupplyEscalationAction;
+  escalatedAt: string;
+  resolvedAt: string | null;
+}
+
+// --- Dispatch Timeout ---
+
+export interface DispatchTimeoutRecord {
+  orderId: string;
+  dispatchJobId: string;
+  timeoutAt: string;
+  timeoutReasonCode: "acceptance_timeout" | "matching_timeout";
+  previousAssignmentId: string | null;
+  escalationAction: NoSupplyEscalationAction;
 }
 
 export interface DispatchAssignmentRecord {
@@ -1678,10 +2087,24 @@ export type SupplyDispatchBlockReason =
   | "exclusivity_pending_review"
   | "exclusivity_expired"
   | "exclusivity_revoked"
-  | "exclusivity_rejected";
+  | "exclusivity_rejected"
+  | "offboarding_pending_debranding";
+
+export type VehicleOffboardingStatus =
+  | "none"
+  | "scheduled"
+  | "debranding_required"
+  | "completed";
+
+export type VehicleDebrandingStatus = "not_required" | "pending" | "completed";
 
 export interface SupplyLifecycleTraceRecord {
-  entityType: "vehicle" | "contract" | "insurance_policy" | "exclusivity";
+  entityType:
+    | "vehicle"
+    | "contract"
+    | "insurance_policy"
+    | "exclusivity"
+    | "offboarding";
   status: string;
   reasonCode: SupplyDispatchBlockReason | null;
   message: string;
@@ -1719,6 +2142,20 @@ export interface VehicleSupplyLifecycleRecord {
     eligible: boolean;
     blockedReasons: SupplyDispatchBlockReason[];
     evaluatedAt: string;
+  };
+  offboarding: {
+    status: VehicleOffboardingStatus;
+    reason: string | null;
+    requestedAt: string | null;
+    effectiveAt: string | null;
+    completedAt: string | null;
+    requestedBy: string | null;
+    debrandingRequired: boolean;
+    debrandingStatus: VehicleDebrandingStatus;
+    debrandingDueAt: string | null;
+    debrandingCompletedAt: string | null;
+    debrandingTicketId: string | null;
+    notes: string | null;
   };
   lastTrace: SupplyLifecycleTraceRecord | null;
 }
@@ -1897,6 +2334,28 @@ export interface ApproveExclusivityCommand {
   reviewedAt?: string;
 }
 
+export interface RejectExclusivityCommand {
+  reviewerId?: string | null;
+  reviewedAt?: string;
+  reason?: string | null;
+}
+
+export interface InitiateVehicleOffboardingCommand {
+  reason: string;
+  effectiveAt?: string | null;
+  requestedBy?: string | null;
+  debrandingRequired?: boolean;
+  debrandingDueAt?: string | null;
+  debrandingTicketId?: string | null;
+  notes?: string | null;
+}
+
+export interface CompleteVehicleDebrandingCommand {
+  completedAt?: string;
+  debrandingTicketId?: string | null;
+  notes?: string | null;
+}
+
 export type PublicInfoVersionStatus = "draft" | "published" | "retired";
 
 export interface PublicInfoVersionRecord {
@@ -2043,6 +2502,8 @@ export interface CallbackTaskRecord {
   updatedAt: string;
 }
 
+export type CallRecordingState = "ready" | "pending" | "missing";
+
 export interface CallSessionRecord {
   callId: string;
   callType: CallType;
@@ -2061,6 +2522,7 @@ export interface CallSessionRecord {
   lastEtaQuotedMinutes: number | null;
   lastEtaQuotedAt: string | null;
   callbackTask: CallbackTaskRecord | null;
+  recordingState: CallRecordingState;
   flags: string[];
 }
 
@@ -2076,6 +2538,116 @@ export const COMPLAINT_CATEGORIES = [
   "other",
 ] as const;
 export type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number];
+
+export const COMPLAINT_RESOLUTION_CODES = [
+  "resolved_with_apology",
+  "resolved_with_refund",
+  "resolved_with_credit",
+  "resolved_with_corrective_action",
+  "resolved_driver_warning",
+  "resolved_driver_suspension",
+  "resolved_no_fault",
+  "resolved_duplicate",
+  "resolved_withdrawn",
+  "resolved_item_returned",
+  "resolved_item_not_found",
+  "resolved_other",
+] as const;
+export type ComplaintResolutionCode =
+  (typeof COMPLAINT_RESOLUTION_CODES)[number];
+
+export const COMPLAINT_CATEGORY_VALID_RESOLUTIONS: Record<
+  ComplaintCategory,
+  readonly ComplaintResolutionCode[]
+> = {
+  late_arrival: [
+    "resolved_with_apology",
+    "resolved_with_refund",
+    "resolved_with_credit",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+  no_arrival: [
+    "resolved_with_apology",
+    "resolved_with_refund",
+    "resolved_with_credit",
+    "resolved_with_corrective_action",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+  driver_service: [
+    "resolved_with_apology",
+    "resolved_with_refund",
+    "resolved_with_credit",
+    "resolved_driver_warning",
+    "resolved_driver_suspension",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+  vehicle_condition: [
+    "resolved_with_apology",
+    "resolved_with_refund",
+    "resolved_with_corrective_action",
+    "resolved_driver_warning",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+  route_issue: [
+    "resolved_with_apology",
+    "resolved_with_refund",
+    "resolved_with_credit",
+    "resolved_with_corrective_action",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+  fare_dispute: [
+    "resolved_with_refund",
+    "resolved_with_credit",
+    "resolved_with_corrective_action",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+  safety_concern: [
+    "resolved_with_apology",
+    "resolved_with_corrective_action",
+    "resolved_driver_warning",
+    "resolved_driver_suspension",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+  lost_and_found: [
+    "resolved_item_returned",
+    "resolved_item_not_found",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+  other: [
+    "resolved_with_apology",
+    "resolved_with_refund",
+    "resolved_with_credit",
+    "resolved_with_corrective_action",
+    "resolved_no_fault",
+    "resolved_duplicate",
+    "resolved_withdrawn",
+    "resolved_other",
+  ],
+};
 
 export const COMPLAINT_CASE_STATUSES = [
   "new",
@@ -2117,8 +2689,28 @@ export interface ReopenComplaintCaseCommand {
 }
 
 export interface ResolveComplaintCaseCommand {
-  resolutionCode: string;
+  resolutionCode: ComplaintResolutionCode;
   closingNote: string;
+}
+
+export interface EscalateComplaintToIncidentCommand {
+  title: string;
+  severity: "low" | "medium" | "high" | "critical";
+  reason: string;
+}
+
+export interface TransferCallToIncidentCommand {
+  title: string;
+  description: string;
+  category: IncidentCategory;
+  severity: IncidentSeverity;
+  relatedOrderId?: string | null;
+  relatedVehicleId?: string | null;
+  relatedDriverId?: string | null;
+}
+
+export interface LinkComplaintToIncidentCommand {
+  incidentId: string;
 }
 
 export interface ComplaintCaseRecord {
@@ -2126,6 +2718,7 @@ export interface ComplaintCaseRecord {
   caseSource: "phone" | "web" | "app" | "ops";
   relatedOrderId: string | null;
   relatedCallId: string | null;
+  relatedIncidentId: string | null;
   category: ComplaintCategory;
   severity: "normal" | "high";
   description: string;
@@ -2133,7 +2726,8 @@ export interface ComplaintCaseRecord {
   status: ComplaintCaseStatus;
   slaDueAt: string;
   slaBreach: boolean;
-  resolutionCode: string | null;
+  reopenCount: number;
+  resolutionCode: ComplaintResolutionCode | null;
   closingNote: string | null;
   createdAt: string;
   updatedAt: string;
@@ -2148,8 +2742,11 @@ export interface ComplaintTimelineEntry {
     | "case_note_added"
     | "case_reopened"
     | "sla_breached"
+    | "sla_recalculated"
     | "case_resolved"
-    | "case_closed";
+    | "case_closed"
+    | "escalated_to_incident"
+    | "incident_linked";
   note: string;
   createdAt: string;
 }
@@ -2314,6 +2911,114 @@ export interface MarkReimbursementPaidCommand {
   paidAt?: string;
 }
 
+export const RECONCILIATION_ISSUE_TYPES = [
+  "forwarder_status_mismatch",
+  "partner_sponsor_mismatch",
+] as const;
+export type ReconciliationIssueType =
+  (typeof RECONCILIATION_ISSUE_TYPES)[number];
+
+export const RECONCILIATION_ISSUE_STATUSES = [
+  "open",
+  "assigned",
+  "resolved",
+  "reopened",
+] as const;
+export type ReconciliationIssueStatus =
+  (typeof RECONCILIATION_ISSUE_STATUSES)[number];
+
+export const RECONCILIATION_ISSUE_RESOLUTION_CODES = [
+  "mirror_resynced",
+  "sponsor_corrected",
+  "external_owner_confirmed",
+  "writeoff_approved",
+  "duplicate_closed",
+  "no_action_required",
+  "resolved_other",
+] as const;
+export type ReconciliationIssueResolutionCode =
+  (typeof RECONCILIATION_ISSUE_RESOLUTION_CODES)[number];
+
+export interface ReconciliationIssueCommentRecord {
+  commentId: string;
+  actorId: string;
+  message: string;
+  artifactIds: string[];
+  createdAt: string;
+}
+
+export interface CreateReconciliationIssueCommand {
+  issueType: ReconciliationIssueType;
+  summary: string;
+  openedBy: string;
+  assigneeId?: string | null;
+  channelKey?: string | null;
+  orderId?: string | null;
+  tenantId?: string | null;
+  partnerId?: string | null;
+  partnerProgramId?: string | null;
+  sponsorReference?: string | null;
+  mirrorOrderId?: string | null;
+  externalOrderId?: string | null;
+  linkedReconciliationJobId?: string | null;
+  comment?: string | null;
+  artifactIds?: string[];
+}
+
+export interface AssignReconciliationIssueCommand {
+  assigneeId: string;
+  actorId: string;
+  note?: string | null;
+}
+
+export interface AddReconciliationIssueCommentCommand {
+  actorId: string;
+  message: string;
+  artifactIds?: string[];
+}
+
+export interface ResolveReconciliationIssueCommand {
+  actorId: string;
+  resolutionCode: ReconciliationIssueResolutionCode;
+  resolutionSummary: string;
+  artifactIds?: string[];
+}
+
+export interface ReopenReconciliationIssueCommand {
+  actorId: string;
+  reason: string;
+  artifactIds?: string[];
+}
+
+export interface ReconciliationIssueRecord {
+  issueId: string;
+  issueType: ReconciliationIssueType;
+  source: "finance_manual" | "forwarder_auto";
+  status: ReconciliationIssueStatus;
+  channelKey: string;
+  summary: string;
+  ownerId: string | null;
+  openedBy: string;
+  orderId: string | null;
+  tenantId: string | null;
+  partnerId: string | null;
+  partnerProgramId: string | null;
+  sponsorReference: string | null;
+  mirrorOrderId: string | null;
+  externalOrderId: string | null;
+  linkedReconciliationJobId: string | null;
+  linkedInvoiceId: string | null;
+  linkedReimbursementBatchId: string | null;
+  resolutionCode: ReconciliationIssueResolutionCode | null;
+  resolutionSummary: string | null;
+  resolvedAt: string | null;
+  reopenCount: number;
+  evidenceArtifactIds: string[];
+  comments: ReconciliationIssueCommentRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const REPORT_OUTPUT_FORMATS = ["csv", "xlsx", "pdf", "zip"] as const;
 export type ReportOutputFormat = (typeof REPORT_OUTPUT_FORMATS)[number];
 
@@ -2365,8 +3070,13 @@ export interface SettlementMatrixRecord {
   orderDomain: "owned" | "forwarded";
   orderSources: string[];
   payerType: string;
+  sponsorType: string;
+  invoiceOwner: string;
   invoicePath: string;
   receiptOwner: string;
+  driverPayoutAuthority: string;
+  discountFundingSource: string;
+  reimbursementRule: string;
   reconciliationPath: string;
   reportingArtifacts: string[];
   localLedgerMode: "full_service" | "shadow_only";
@@ -2440,6 +3150,7 @@ export interface ReportJobDetailRecord extends ReportJobRecord {
         downloadMetadata: ControlledDownloadRecord;
       })
     | null;
+  evidenceGovernance?: EvidenceSubjectGovernanceRecord | null;
   rows?: DispatchRecordingIndexRowRecord[];
   partnerRevenueRows?: PartnerRevenueSummaryRowRecord[];
   settlementMatrix?: SettlementMatrixRecord[];
@@ -2516,6 +3227,7 @@ export interface FilingPackageDetailRecord extends FilingPackageRecord {
   immutable: true;
   manifest: FilingPackageManifestRecord | null;
   downloadMetadata: FilingPackageDownloadRecord | null;
+  evidenceGovernance?: EvidenceSubjectGovernanceRecord | null;
 }
 
 export const FORWARDED_ORDER_STATUSES = [
@@ -2635,6 +3347,20 @@ export interface ReconciliationJobRecord {
   notes: string | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+export interface ForwarderReconciliationIssue {
+  reconciliationJob: ReconciliationJobRecord;
+  mirrorOrderId: string;
+  platformCode: PlatformCode;
+  externalOrderId: string;
+  status: ForwardedOrderStatus;
+  acceptedDriverId: string | null;
+  lastSyncError: ForwarderSyncErrorRecord | null;
+  financeContext: ForwardedOrderFinanceContext;
+  manualFallback: ForwardedOrderManualFallbackRecord;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -2779,10 +3505,52 @@ export interface CreateIncidentCommand {
   location?: string;
 }
 
+export const INCIDENT_ESCALATION_TARGETS = [
+  "ops_supervisor",
+  "dispatch_manager",
+  "safety_officer",
+  "roc_duty",
+] as const;
+export type IncidentEscalationTarget =
+  (typeof INCIDENT_ESCALATION_TARGETS)[number];
+
 export interface UpdateIncidentCommand {
   status?: IncidentStatus;
   assignedTo?: string;
   resolutionNote?: string;
+  escalationTarget?: IncidentEscalationTarget | null;
+  severity?: IncidentSeverity;
+}
+
+export interface CreateIncidentFromDispatchExceptionCommand {
+  orderId: string;
+  exceptionReasonCode: string;
+  exceptionNote?: string;
+  severity: IncidentSeverity;
+  escalationTarget?: IncidentEscalationTarget;
+  reportedBy: string;
+}
+
+export interface RecordServiceRecoveryActionCommand {
+  actionType:
+    | "passenger_recontact"
+    | "fare_adjustment"
+    | "redispatch_ordered"
+    | "voucher_issued"
+    | "apology_sent"
+    | "driver_reassigned"
+    | "other";
+  note: string;
+  actor: string;
+}
+
+export interface ServiceRecoveryActionRecord {
+  actionId: string;
+  incidentId: string;
+  actionType: string;
+  note: string;
+  actor: string;
+  createdAt: string;
 }
 
 export interface IncidentRecord {
@@ -2798,9 +3566,12 @@ export interface IncidentRecord {
   relatedComplaintCaseNo: string | null;
   reportedBy: string;
   assignedTo: string | null;
+  escalationTarget: IncidentEscalationTarget | null;
+  sourceDispatchExceptionOrderId: string | null;
   occurredAt: string | null;
   location: string | null;
   resolutionNote: string | null;
+  serviceRecoveryActions: ServiceRecoveryActionRecord[];
   createdAt: string;
   updatedAt: string;
 }
@@ -3033,6 +3804,8 @@ export interface PlatformTenantBootstrapRoleDefault {
   roleCode: string;
   displayName: string;
   required: boolean;
+  invitedAt: string | null;
+  acknowledgedAt: string | null;
 }
 
 export interface PlatformTenantBillingBaseline {
@@ -3071,7 +3844,7 @@ export interface PlatformAdminTenantRecord {
   id: string;
   code: string;
   name: string;
-  status: "draft" | "active" | "paused";
+  status: "draft" | "active" | "paused" | "rollback_hold";
   enabledModules: PlatformTenantModule[];
   quotas: PlatformTenantQuotaSummary;
   bootstrapDefaults: PlatformTenantBootstrapDefaults;
@@ -3104,6 +3877,15 @@ export interface UpdatePlatformTenantOnboardingCommand {
 export interface SetPlatformTenantRolloutStageCommand {
   stage: PlatformTenantRolloutStage;
   notes?: string | null;
+}
+
+export interface InviteTenantRoleCommand {
+  roleCode: string;
+  inviteeEmail?: string;
+}
+
+export interface AcknowledgeTenantRoleCommand {
+  roleCode: string;
 }
 
 export interface UpdatePlatformTenantSettingsCommand {
@@ -3179,6 +3961,130 @@ export interface SetPlatformMaintenanceModeCommand {
   reason?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+}
+
+export const OPERATIONAL_ALERT_KEYS = [
+  "dispatch_lag",
+  "recording_backlog",
+  "driver_state_lag",
+  "webhook_failure_burst",
+  "eligibility_review_backlog",
+] as const;
+export type OperationalAlertKey = (typeof OPERATIONAL_ALERT_KEYS)[number];
+
+export const OPERATIONAL_ALERT_STATES = [
+  "healthy",
+  "warning",
+  "critical",
+] as const;
+export type OperationalAlertState = (typeof OPERATIONAL_ALERT_STATES)[number];
+
+export const OPERATIONAL_ALERT_ROUTES = ["ops", "platform"] as const;
+export type OperationalAlertRoute = (typeof OPERATIONAL_ALERT_ROUTES)[number];
+
+export const OPERATIONAL_ALERT_UNITS = ["count", "minutes", "percent"] as const;
+export type OperationalAlertUnit = (typeof OPERATIONAL_ALERT_UNITS)[number];
+
+export interface OperationalAlertThresholds {
+  warning: number;
+  critical: number;
+  unit: OperationalAlertUnit;
+}
+
+export interface OperationalAlertRecord {
+  key: OperationalAlertKey;
+  state: OperationalAlertState;
+  measuredValue: number;
+  thresholds: OperationalAlertThresholds;
+  routes: OperationalAlertRoute[];
+  observedAt: string;
+}
+
+export interface OperationalDispatchMetrics {
+  activeOrders: number;
+  queueDepth: number;
+  laggedOrders: number;
+  redispatchOrders: number;
+  exceptionHoldOrders: number;
+  dispatchFailedOrders: number;
+  oldestReadyOrderLagMinutes: number | null;
+}
+
+export interface OperationalRecordingMetrics {
+  phoneOrders: number;
+  linkedOrders: number;
+  pendingOrders: number;
+  pendingCallSessions: number;
+  missingRecordingLinks: number;
+  oldestPendingLagMinutes: number | null;
+  linkedRatioPercent: number;
+}
+
+export interface OperationalDriverStateMetrics {
+  totalDrivers: number;
+  availableDrivers: number;
+  dispatchEligibleDrivers: number;
+  offlineDrivers: number;
+  staleLocationDrivers: number;
+  missingLocationDrivers: number;
+  oldestLocationLagMinutes: number | null;
+}
+
+export interface OperationalWebhookMetrics {
+  totalEndpoints: number;
+  activeEndpoints: number;
+  disabledEndpoints: number;
+  queuedDeliveries: number;
+  failedDeliveriesLastHour: number;
+  oldestQueuedDeliveryLagMinutes: number | null;
+}
+
+export interface OperationalEligibilityMetrics {
+  totalReviewQueue: number;
+  manualReviewQueue: number;
+  manualFallbackQueue: number;
+  ineligibleQueue: number;
+  recentFailureCount24h: number;
+}
+
+export interface OperationalReportingMetrics {
+  queuedJobs: number;
+  failedJobs: number;
+  dispatchRecordingIndexQueuedJobs: number;
+}
+
+export interface OperationalAdapterMetrics {
+  totalAdapters: number;
+  healthyAdapters: number;
+  degradedAdapters: number;
+  downAdapters: number;
+}
+
+export interface OperationalRoleView {
+  route: OperationalAlertRoute;
+  alertKeys: OperationalAlertKey[];
+  focusAreas: Array<
+    | "dispatch"
+    | "recording"
+    | "driver_state"
+    | "webhook"
+    | "eligibility"
+    | "reporting"
+    | "adapters"
+  >;
+}
+
+export interface OperationalObservabilitySnapshot {
+  generatedAt: string;
+  alerts: OperationalAlertRecord[];
+  dispatch: OperationalDispatchMetrics;
+  recording: OperationalRecordingMetrics;
+  driverState: OperationalDriverStateMetrics;
+  webhook: OperationalWebhookMetrics;
+  eligibility: OperationalEligibilityMetrics;
+  reporting: OperationalReportingMetrics;
+  adapters: OperationalAdapterMetrics;
+  roleViews: OperationalRoleView[];
 }
 
 export interface PlatformPricingRuleRecord {
