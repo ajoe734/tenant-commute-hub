@@ -190,8 +190,19 @@ export default function BookingDetail() {
             <Input value={booking.costCenter ?? ""} readOnly />
           </div>
           <div className="space-y-2">
-            <Label>Vehicle Preference</Label>
-            <Input value={booking.vehiclePreference ?? ""} readOnly />
+            <Label>偏好用車類型</Label>
+            {(() => {
+              const pref = booking.vehiclePreference;
+              const entry = pref ? VEHICLE_LABELS[pref] : null;
+              if (!entry) return <Input value={pref ?? "—"} readOnly />;
+              const Icon = entry.icon;
+              return (
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <Icon className="h-4 w-4" />
+                  <span>{entry.label}</span>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
