@@ -2,31 +2,37 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "skipLibCheck": true,
-
-    /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-
-    /* Linting */
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noImplicitAny": false,
     "noFallthroughCasesInSwitch": false,
-
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@drts/api-client": ["./src/lib/drts-shim/api-client.ts"],
-      "@drts/contracts": ["./src/lib/drts-shim/contracts.ts"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@drts/api-client": [
+        "./src/lib/drts-shim/api-client.ts"
+      ],
+      "@drts/contracts": [
+        "./src/lib/drts-shim/contracts.ts"
+      ]
     }
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
