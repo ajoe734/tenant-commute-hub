@@ -4,6 +4,7 @@ import type { BookingRecord, OwnedOrderStatus } from "@drts/contracts";
 import { OWNED_ORDER_STATUSES } from "@drts/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
