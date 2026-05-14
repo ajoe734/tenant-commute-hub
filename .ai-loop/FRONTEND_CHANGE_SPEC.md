@@ -14,15 +14,15 @@ schemas or treating Supabase as the business authority.
 
 ## Scope
 
-- [ ] `TN_CostCenter`: wire cost-center list/detail/create-update/disable and
+- [x] `TN_CostCenter`: wire cost-center list/detail/create-update/disable and
       coverage readout to the shared client.
-- [ ] `TN_Rules`: wire approval-rule list/detail/create-update/disable/reorder,
+- [x] `TN_Rules`: wire approval-rule list/detail/create-update/disable/reorder,
       dry-run/evaluate, and quota-aware rule displays to the shared client.
-- [ ] `TN_NewBooking`: wire cost-center selection, quota preview,
+- [x] `TN_NewBooking`: wire cost-center selection, quota preview,
       approval-required state, and approval-request status to the shared client.
-- [ ] Preserve the closed-loop request rules: Authorization, `X-Request-Id`, and
+- [x] Preserve the closed-loop request rules: Authorization, `X-Request-Id`, and
       `Idempotency-Key` on mutating command endpoints.
-- [ ] Keep `API_GAP_REQUESTS.json` empty unless an exact missing endpoint,
+- [x] Keep `API_GAP_REQUESTS.json` empty unless an exact missing endpoint,
       method, field, or error envelope is found against the locked contract.
 
 ## Shared Client Surface
