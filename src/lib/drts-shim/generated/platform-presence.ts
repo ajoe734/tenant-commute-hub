@@ -23,9 +23,23 @@ export interface PlatformPresenceRecord {
   updatedAt: string;
 }
 
+export type PlatformPresenceAdapterStatus =
+  | "healthy"
+  | "degraded"
+  | "down"
+  | "unknown";
+
+export interface PlatformPresenceAdapterStatusRecord {
+  platformCode: PlatformCode;
+  status: PlatformPresenceAdapterStatus;
+  blockingReason: string | null;
+  lastSyncAt: string | null;
+}
+
 export interface PlatformPresenceSummary {
   driverId: string;
   presences: PlatformPresenceRecord[];
+  adapterStatuses?: PlatformPresenceAdapterStatusRecord[];
   notes?: string[];
 }
 

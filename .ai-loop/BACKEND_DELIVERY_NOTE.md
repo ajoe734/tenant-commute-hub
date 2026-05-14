@@ -1,53 +1,65 @@
-# Backend Delivery Note — Iteration 0
+# Backend Delivery Note - Iteration 1
 
 > Written by: VS Code LLM (drts-fleet-platform)
-> Date: 2026-04-15
-> Contract commit: 013be16d04113485050bbc833dd5c26778bf4350
+> Date: 2026-05-14
+> Contract commit: `373225b746ab15b72b7c5b954b24b89b4b8ce23f`
+> Source task: `TCH-SDK-BUMP-001`
 
-## What's available now
+## Available Now
 
-All Wave A–E tasks in `drts-fleet-platform` are **done** as of 2026-04-15.
+The tenant governance backend wave is closed in `drts-fleet-platform` machine
+truth:
 
-### Tenant Portal endpoints (available)
+- `BE-CC-001`: tenant cost-center directory
+- `BE-RULE-001`: tenant approval rules and evaluator
+- `BE-QUOTA-001`: tenant quota read model, policy, preview, and ledger
+- `BE-APR-001`: tenant booking approval request lifecycle
+- `DOC-API-GOV-001`: OpenAPI and audit documentation
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/bookings` | Create booking |
-| GET | `/api/bookings` | List bookings (paginated) |
-| GET | `/api/bookings/:id` | Get booking detail |
-| POST | `/api/bookings/:id/cancel` | Cancel booking |
-| GET | `/api/passengers` | List passengers |
-| POST | `/api/passengers` | Create passenger |
-| PUT | `/api/passengers/:id` | Update passenger |
-| DELETE | `/api/passengers/:id` | Delete passenger |
-| GET | `/api/addresses` | List addresses |
-| POST | `/api/addresses` | Create address |
-| GET | `/api/reports` | Tenant reports |
-| GET | `/api/api-keys` | List API keys |
-| POST | `/api/api-keys` | Create API key |
-| DELETE | `/api/api-keys/:id` | Revoke API key |
-| GET | `/api/webhooks` | List webhook endpoints |
-| POST | `/api/webhooks` | Register webhook |
-| DELETE | `/api/webhooks/:id` | Delete webhook |
-| GET | `/api/billing/invoices` | List invoices |
-| GET | `/api/billing/invoices/:id/download` | Download invoice PDF |
-| GET | `/api/audit` | Audit trail (append-only) |
+## Tenant Endpoints
 
-### Auth
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/tenant/cost-centers` | List cost centers |
+| `GET` | `/api/tenant/cost-centers/coverage` | Cost-center coverage report |
+| `GET` | `/api/tenant/cost-centers/:code` | Cost-center detail |
+| `POST` | `/api/tenant/cost-centers` | Create or update cost center |
+| `POST` | `/api/tenant/cost-centers/disable` | Disable cost center |
+| `GET` | `/api/tenant/quotas` | Tenant quota summary |
+| `GET` | `/api/tenant/cost-centers/:code/quota` | Cost-center quota summary |
+| `POST` | `/api/tenant/quotas/policies` | Upsert quota policy |
+| `POST` | `/api/tenant/quotas/preview` | Preview booking quota impact |
+| `GET` | `/api/tenant/quotas/ledger` | List quota ledger |
+| `GET` | `/api/tenant/approval-rules` | List approval rules |
+| `GET` | `/api/tenant/approval-rules/:ruleId` | Approval-rule detail |
+| `POST` | `/api/tenant/approval-rules` | Create approval rule |
+| `PUT` | `/api/tenant/approval-rules/:ruleId` | Update approval rule |
+| `POST` | `/api/tenant/approval-rules/:ruleId/disable` | Disable approval rule |
+| `POST` | `/api/tenant/approval-rules/reorder` | Reorder approval rules |
+| `POST` | `/api/tenant/approval-rules/evaluate` | Dry-run/evaluate approval rules |
+| `GET` | `/api/tenant/approval-requests` | List booking approval requests |
+| `GET` | `/api/tenant/approval-requests/:approvalRequestId` | Approval-request detail |
+| `POST` | `/api/tenant/approval-requests/:approvalRequestId/approve` | Approve request |
+| `POST` | `/api/tenant/approval-requests/:approvalRequestId/reject` | Reject request |
+| `POST` | `/api/tenant/approval-requests/:approvalRequestId/escalate` | Escalate request |
 
-- Bearer token from Supabase auth is forwarded as `Authorization: Bearer <token>`
-- All endpoints require authentication
+## Client Surface
 
-### Contracts package
+Use `@drts/api-client` at the locked contract commit. Relevant methods are
+listed in `FRONTEND_CHANGE_SPEC.md` and map directly to the endpoints above.
 
-TypeScript types are published from `@drts/contracts`. Not yet installable as npm package — for now, copy type definitions from `drts-fleet-platform/packages/contracts/src/`.
+## Error Codes To Surface
 
-## What's NOT yet available
+- `BOOKING_COST_CENTER_UNKNOWN`
+- `BOOKING_COST_CENTER_INVALID`
+- `BOOKING_COST_CENTER_DISABLED`
+- `QUOTA_INSUFFICIENT_AT_COMMIT`
+- `APPROVAL_NOT_AUTHORIZED`
+- `APPROVAL_NO_RESOLVABLE_APPROVERS`
 
-- Real-time push notifications (Phase 2)
-- Driver location stream (Phase 2)
-- Platform admin cross-tenant endpoints (available but tenant UI doesn't need them)
+## Next Step
 
-## Next delivery
-
-Will be announced in the next iteration's `BACKEND_DELIVERY_NOTE.md` after Lovable reports gaps in `API_GAP_REQUESTS.json`.
+`tenant-commute-hub` should implement `TCH-SDK-BUMP-001` from
+`FRONTEND_CHANGE_SPEC.json`. If the frontend finds a concrete missing contract,
+write it to `API_GAP_REQUESTS.json` with the exact missing endpoint, method,
+field, or error envelope.

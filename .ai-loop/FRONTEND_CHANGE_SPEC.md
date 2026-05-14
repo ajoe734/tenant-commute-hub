@@ -1,37 +1,74 @@
-# Frontend Change Spec — Iteration 0 (Bootstrap)
+# Frontend Change Spec - Iteration 1
 
 > Written by: VS Code LLM (drts-fleet-platform)
-> Date: 2026-04-15
-> Iteration: 0 — initial wiring to core API
+> Date: 2026-05-14
+> Source task: `TCH-SDK-BUMP-001`
+> Contract commit: `373225b746ab15b72b7c5b954b24b89b4b8ce23f`
 
 ## Summary
 
-This is the bootstrap iteration. No new UI pages are requested yet.
-The goal is to establish the closed-loop protocol and verify that
-`tenant-commute-hub` can reach `drts-fleet-platform` API endpoints.
+Tenant governance backend, API docs, and client surfaces are now closed in
+`drts-fleet-platform`. `tenant-commute-hub` should bump/use the shared client
+surface for the redesigned tenant governance screens instead of inventing local
+schemas or treating Supabase as the business authority.
 
 ## Scope
 
-- [ ] Replace all direct Supabase calls for bookings / passengers / billing with calls to `drts-fleet-platform` REST API
-- [ ] Add `Authorization: Bearer <token>` header to all API requests
-- [ ] Add `X-Request-Id` header (UUID v4) to all mutating requests
-- [ ] Add `Idempotency-Key` header to all POST command endpoints
+- [ ] `TN_CostCenter`: wire cost-center list/detail/create-update/disable and
+      coverage readout to the shared client.
+- [ ] `TN_Rules`: wire approval-rule list/detail/create-update/disable/reorder,
+      dry-run/evaluate, and quota-aware rule displays to the shared client.
+- [ ] `TN_NewBooking`: wire cost-center selection, quota preview,
+      approval-required state, and approval-request status to the shared client.
+- [ ] Preserve the closed-loop request rules: Authorization, `X-Request-Id`, and
+      `Idempotency-Key` on mutating command endpoints.
+- [ ] Keep `API_GAP_REQUESTS.json` empty unless an exact missing endpoint,
+      method, field, or error envelope is found against the locked contract.
 
-## Base URL
+## Shared Client Surface
 
+Use `@drts/api-client` from contract commit
+`373225b746ab15b72b7c5b954b24b89b4b8ce23f`.
+
+Relevant methods:
+
+```text
+listCostCenters
+getCostCenter
+getTenantCostCenterCoverageReport
+upsertCostCenter
+disableCostCenter
+getTenantQuotaSummary
+getTenantCostCenterQuota
+upsertTenantQuotaPolicy
+previewTenantBookingQuotaImpact
+listTenantQuotaLedger
+listApprovalRules
+upsertApprovalRule
+reorderApprovalRules
+evaluateApprovalRules
+disableApprovalRule
+listApprovalRequests
+getApprovalRequest
+approveApprovalRequest
+rejectApprovalRequest
+escalateApprovalRequest
 ```
-VITE_CORE_API_BASE_URL=https://<staging-host>/api
-```
 
-Set this in `.env.local`. Do not hardcode.
+## Required Error Handling
 
-## API endpoints available (from drts-fleet-platform)
+Handle these concrete UI-visible errors:
 
-See `BACKEND_DELIVERY_NOTE.md` for current delivery state.
+- `BOOKING_COST_CENTER_UNKNOWN`
+- `BOOKING_COST_CENTER_INVALID`
+- `BOOKING_COST_CENTER_DISABLED`
+- `QUOTA_INSUFFICIENT_AT_COMMIT`
+- `APPROVAL_NOT_AUTHORIZED`
+- `APPROVAL_NO_RESOLVABLE_APPROVERS`
 
-## What Lovable should do
+## References
 
-1. Read `FRONTEND_CHANGE_SPEC.json` for machine-readable task list
-2. Implement each task, tracing to the spec entry id
-3. After completing, write `LOVABLE_CHANGE_FEEDBACK.md` and `API_GAP_REQUESTS.json`
-4. Commit and push
+- `drts-fleet-platform/packages/api-client/src/index.ts`
+- `drts-fleet-platform/packages/contracts/src/index.ts`
+- `drts-fleet-platform/docs/04-api/openapi-spec.yaml`
+- `drts-fleet-platform/docs/03-runbooks/tenant-governance-wave-execution-packet-20260513.md`

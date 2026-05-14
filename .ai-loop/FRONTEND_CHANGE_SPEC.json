@@ -1,36 +1,52 @@
 {
-  "iteration": 0,
+  "iteration": 1,
   "written_by": "vscode-llm",
-  "written_at": "2026-04-15T04:30:00Z",
-  "contract_version": "013be16d04113485050bbc833dd5c26778bf4350",
+  "written_at": "2026-05-14T03:03:21Z",
+  "contract_version": "373225b746ab15b72b7c5b954b24b89b4b8ce23f",
+  "source_task": "TCH-SDK-BUMP-001",
   "tasks": [
     {
-      "id": "SPEC-0001",
-      "title": "Add core API base URL config",
-      "type": "config",
+      "id": "TCH-SDK-BUMP-001",
+      "title": "Bump tenant governance SDK and wire governance UI",
+      "type": "integration",
       "priority": "critical",
-      "description": "Add VITE_CORE_API_BASE_URL to .env.local and .env.example. All API calls must use this base.",
-      "acceptance": ["No hardcoded API URLs in src/", "VITE_CORE_API_BASE_URL used in all fetch calls"]
-    },
-    {
-      "id": "SPEC-0002",
-      "title": "Add required headers to all API requests",
-      "type": "infrastructure",
-      "priority": "critical",
-      "description": "All requests must include Authorization: Bearer <token>, X-Request-Id (UUID v4). POST command endpoints must also include Idempotency-Key.",
+      "description": "Use the drts-fleet-platform tenant governance client surface for TN_CostCenter, TN_Rules, and TN_NewBooking. Do not invent local governance schemas or keep Supabase as business authority for these flows.",
+      "source_contracts": [
+        "packages/api-client/src/index.ts",
+        "packages/contracts/src/index.ts",
+        "docs/04-api/openapi-spec.yaml",
+        "docs/03-runbooks/tenant-governance-wave-execution-packet-20260513.md#7-ui-unblock-map"
+      ],
+      "client_methods": [
+        "listCostCenters",
+        "getCostCenter",
+        "getTenantCostCenterCoverageReport",
+        "upsertCostCenter",
+        "disableCostCenter",
+        "getTenantQuotaSummary",
+        "getTenantCostCenterQuota",
+        "upsertTenantQuotaPolicy",
+        "previewTenantBookingQuotaImpact",
+        "listTenantQuotaLedger",
+        "listApprovalRules",
+        "upsertApprovalRule",
+        "reorderApprovalRules",
+        "evaluateApprovalRules",
+        "disableApprovalRule",
+        "listApprovalRequests",
+        "getApprovalRequest",
+        "approveApprovalRequest",
+        "rejectApprovalRequest",
+        "escalateApprovalRequest"
+      ],
       "acceptance": [
-        "Authorization header present in all requests",
-        "X-Request-Id present in all requests",
-        "Idempotency-Key present on all POST mutations"
+        "TN_CostCenter uses the shared client for cost-center list/detail/create-update/disable and coverage readout.",
+        "TN_Rules uses the shared client for approval-rule list/detail/create-update/disable/reorder/evaluate and quota-aware rule displays.",
+        "TN_NewBooking uses shared client flows for cost-center selection, quota preview, approval-required state, and approval request status.",
+        "Handle BOOKING_COST_CENTER_UNKNOWN, BOOKING_COST_CENTER_INVALID, BOOKING_COST_CENTER_DISABLED, QUOTA_INSUFFICIENT_AT_COMMIT, APPROVAL_NOT_AUTHORIZED, and APPROVAL_NO_RESOLVABLE_APPROVERS.",
+        "All mutating calls still send Authorization, X-Request-Id, and Idempotency-Key where required by the existing closed-loop protocol.",
+        "API_GAP_REQUESTS.json should remain empty unless a concrete missing method, field, endpoint, or error envelope is found against contract version 373225b746ab15b72b7c5b954b24b89b4b8ce23f."
       ]
-    },
-    {
-      "id": "SPEC-0003",
-      "title": "Audit Supabase direct calls",
-      "type": "audit",
-      "priority": "high",
-      "description": "Enumerate all places that call Supabase directly for business data (bookings, passengers, billing, api-keys, webhooks, audit). List them in API_GAP_REQUESTS.json so VS Code LLM can track which core endpoints need to be delivered.",
-      "acceptance": ["API_GAP_REQUESTS.json populated with all gaps found"]
     }
   ]
 }

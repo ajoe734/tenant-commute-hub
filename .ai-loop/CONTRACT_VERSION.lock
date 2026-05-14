@@ -1,9 +1,10 @@
 # CONTRACT_VERSION.lock
-# DO NOT EDIT MANUALLY — updated by VS Code LLM only
+# DO NOT EDIT MANUALLY - updated by VS Code LLM only
 
 repo: drts-fleet-platform
-commit: 013be16d04113485050bbc833dd5c26778bf4350
-commit_date: 2026-04-15T03:25:29Z
-locked_at: 2026-04-15T04:30:00Z
+commit: 373225b746ab15b72b7c5b954b24b89b4b8ce23f
+commit_date: 2026-05-14T01:34:04+00:00
+locked_at: 2026-05-14T03:03:21Z
 locked_by: vscode-llm
+source_task: TCH-SDK-BUMP-001
 boundary_doc: docs/02-architecture/tenant-commute-hub-boundary.md
