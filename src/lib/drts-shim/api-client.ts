@@ -8,8 +8,14 @@ import type {
   CreateTenantUserCommand,
   CreateTenantWebhookEndpointCommand,
   DisableTenantCostCenterCommand,
+  EvaluateTenantApprovalRuleCommand,
   IssueTenantApiKeyCommand,
+  ListTenantApprovalRulesQuery,
   ListTenantCostCentersQuery,
+  ReorderTenantApprovalRulesCommand,
+  TenantApprovalEvaluationResult,
+  TenantApprovalRuleRecord,
+  UpsertTenantApprovalRuleCommand,
   NotificationRecord,
   PartnerChannelEntryRecord,
   PartnerEligibilityVerificationRecord,
@@ -451,6 +457,73 @@ export class ApiClient {
   ): Promise<TenantCostCenterRecord> {
     return this.post<TenantCostCenterRecord>(
       "/api/tenant/cost-centers/disable",
+      { body: command },
+    );
+  }
+
+  async listApprovalRules(
+    query?: ListTenantApprovalRulesQuery,
+  ): Promise<TenantApprovalRuleRecord[]> {
+    const params = new URLSearchParams();
+    if (query?.activeOnly !== undefined) {
+      params.set("activeOnly", String(query.activeOnly));
+    }
+    if (query?.search) {
+      params.set("search", query.search);
+    }
+    if (query?.action) {
+      params.set("action", query.action);
+    }
+    const search = params.toString();
+    const path = search
+      ? `/api/tenant/approval-rules?${search}`
+      : "/api/tenant/approval-rules";
+    return this.getList<TenantApprovalRuleRecord>(path);
+  }
+
+  async getApprovalRule(ruleId: string): Promise<TenantApprovalRuleRecord> {
+    return this.get<TenantApprovalRuleRecord>(
+      `/api/tenant/approval-rules/${encodeURIComponent(ruleId)}`,
+    );
+  }
+
+  async upsertApprovalRule(
+    command: UpsertTenantApprovalRuleCommand,
+  ): Promise<TenantApprovalRuleRecord> {
+    if (command.ruleId) {
+      return this.request<TenantApprovalRuleRecord>(
+        "PUT",
+        `/api/tenant/approval-rules/${encodeURIComponent(command.ruleId)}`,
+        { body: command },
+      );
+    }
+    return this.post<TenantApprovalRuleRecord>("/api/tenant/approval-rules", {
+      body: command,
+    });
+  }
+
+  async disableApprovalRule(
+    ruleId: string,
+  ): Promise<TenantApprovalRuleRecord> {
+    return this.post<TenantApprovalRuleRecord>(
+      `/api/tenant/approval-rules/${encodeURIComponent(ruleId)}/disable`,
+    );
+  }
+
+  async reorderApprovalRules(
+    command: ReorderTenantApprovalRulesCommand,
+  ): Promise<TenantApprovalRuleRecord[]> {
+    return this.post<TenantApprovalRuleRecord[]>(
+      "/api/tenant/approval-rules/reorder",
+      { body: command },
+    );
+  }
+
+  async evaluateApprovalRules(
+    command: EvaluateTenantApprovalRuleCommand,
+  ): Promise<TenantApprovalEvaluationResult> {
+    return this.post<TenantApprovalEvaluationResult>(
+      "/api/tenant/approval-rules/evaluate",
       { body: command },
     );
   }

@@ -21,6 +21,7 @@ import BookingDetail from "./pages/BookingDetail";
 import BookingList from "./pages/BookingList";
 import CostCenters from "./pages/CostCenters";
 import Dashboard from "./pages/Dashboard";
+import Rules from "./pages/Rules";
 import Login from "./pages/Login";
 import NewBooking from "./pages/NewBooking";
 import NotFound from "./pages/NotFound";
@@ -89,6 +90,10 @@ const App = () => (
             <Route
               path="/cost-centers"
               element={withShell(<PartnerShellOnly element={<CostCenters />} />)}
+            />
+            <Route
+              path="/rules"
+              element={withShell(<PartnerShellOnly element={<Rules />} />)}
             />
             <Route
               path="/booking-list"
