@@ -7,7 +7,9 @@ import type {
   CreateTenantBookingCommand,
   CreateTenantUserCommand,
   CreateTenantWebhookEndpointCommand,
+  DisableTenantCostCenterCommand,
   IssueTenantApiKeyCommand,
+  ListTenantCostCentersQuery,
   NotificationRecord,
   PartnerChannelEntryRecord,
   PartnerEligibilityVerificationRecord,
@@ -20,6 +22,8 @@ import type {
   TenantApiKeyRecord,
   TenantBillingProfile,
   TenantBootstrapSession,
+  TenantCostCenterCoverageReport,
+  TenantCostCenterRecord,
   TenantInvoiceRecord,
   TenantNotificationPreferences,
   TenantPassengerRecord,
@@ -33,6 +37,7 @@ import type {
   UpdateTenantSlaProfileCommand,
   UpdateTenantWebhookEndpointCommand,
   UpsertTenantAddressCommand,
+  UpsertTenantCostCenterCommand,
   UpsertTenantPassengerCommand,
   VerifyPartnerEligibilityCommand,
   WebhookDeliveryRecord,
@@ -399,5 +404,54 @@ export class ApiClient {
 
   async listTenantAuditLogs(): Promise<AuditLogRecord[]> {
     return this.getList<AuditLogRecord>("/api/tenant/audit");
+  }
+
+  async listCostCenters(
+    query?: ListTenantCostCentersQuery,
+  ): Promise<TenantCostCenterRecord[]> {
+    const params = new URLSearchParams();
+    if (query?.activeOnly !== undefined) {
+      params.set("activeOnly", String(query.activeOnly));
+    }
+    if (query?.ownerUserId) {
+      params.set("ownerUserId", query.ownerUserId);
+    }
+    if (query?.search) {
+      params.set("search", query.search);
+    }
+    const search = params.toString();
+    const path = search
+      ? `/api/tenant/cost-centers?${search}`
+      : "/api/tenant/cost-centers";
+    return this.getList<TenantCostCenterRecord>(path);
+  }
+
+  async getCostCenter(code: string): Promise<TenantCostCenterRecord> {
+    return this.get<TenantCostCenterRecord>(
+      `/api/tenant/cost-centers/${encodeURIComponent(code)}`,
+    );
+  }
+
+  async getTenantCostCenterCoverageReport(): Promise<TenantCostCenterCoverageReport> {
+    return this.get<TenantCostCenterCoverageReport>(
+      "/api/tenant/cost-centers/coverage",
+    );
+  }
+
+  async upsertCostCenter(
+    command: UpsertTenantCostCenterCommand,
+  ): Promise<TenantCostCenterRecord> {
+    return this.post<TenantCostCenterRecord>("/api/tenant/cost-centers", {
+      body: command,
+    });
+  }
+
+  async disableCostCenter(
+    command: DisableTenantCostCenterCommand,
+  ): Promise<TenantCostCenterRecord> {
+    return this.post<TenantCostCenterRecord>(
+      "/api/tenant/cost-centers/disable",
+      { body: command },
+    );
   }
 }

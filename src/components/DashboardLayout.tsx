@@ -13,6 +13,7 @@ import {
   MapPin,
   Plus,
   Shield,
+  Tag,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ const navigation = [
   { name: "建立預約", href: "/bookings/new", icon: Plus },
   { name: "乘客管理", href: "/passengers", icon: Users },
   { name: "地址簿", href: "/addresses", icon: MapPin },
+  { name: "成本中心", href: "/cost-centers", icon: Tag },
   { name: "報表下載", href: "/reports", icon: FileText },
   { name: "API Keys", href: "/api-keys", icon: Key },
   { name: "Webhooks", href: "/webhooks", icon: Bell },

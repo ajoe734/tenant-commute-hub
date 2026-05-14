@@ -19,6 +19,7 @@ import AuditLog from "./pages/AuditLog";
 import BillingManagement from "./pages/BillingManagement";
 import BookingDetail from "./pages/BookingDetail";
 import BookingList from "./pages/BookingList";
+import CostCenters from "./pages/CostCenters";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import NewBooking from "./pages/NewBooking";
@@ -85,7 +86,10 @@ const App = () => (
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/bookings" element={<Navigate to="/booking-list" replace />} />
             <Route path="/admin" element={<Navigate to="/users" replace />} />
-            <Route path="/cost-centers" element={<Navigate to="/" replace />} />
+            <Route
+              path="/cost-centers"
+              element={withShell(<PartnerShellOnly element={<CostCenters />} />)}
+            />
             <Route
               path="/booking-list"
               element={withShell(<PartnerShellOnly element={<BookingList />} />)}
