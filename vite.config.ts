@@ -46,6 +46,9 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    // Allow cloudflared / ngrok / any tunnel hostname so external dev access works.
+    // Acceptable for dev only; production build (`pnpm build`) ignores this.
+    allowedHosts: true,
     fs: {
       allow: [path.resolve(__dirname, ".."), ...(coreRepoRoot ? [coreRepoRoot] : [])],
     },
