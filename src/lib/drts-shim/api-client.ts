@@ -15,6 +15,9 @@ import type {
   ReorderTenantApprovalRulesCommand,
   TenantApprovalEvaluationResult,
   TenantApprovalRuleRecord,
+  TenantBookingQuotaImpactPreview,
+  TenantBookingQuotaImpactQuery,
+  TenantQuotaSummary,
   UpsertTenantApprovalRuleCommand,
   NotificationRecord,
   PartnerChannelEntryRecord,
@@ -525,6 +528,19 @@ export class ApiClient {
     return this.post<TenantApprovalEvaluationResult>(
       "/api/tenant/approval-rules/evaluate",
       { body: command },
+    );
+  }
+
+  async getTenantQuotaSummary(): Promise<TenantQuotaSummary> {
+    return this.get<TenantQuotaSummary>("/api/tenant/quotas");
+  }
+
+  async previewTenantBookingQuotaImpact(
+    query: TenantBookingQuotaImpactQuery,
+  ): Promise<TenantBookingQuotaImpactPreview> {
+    return this.post<TenantBookingQuotaImpactPreview>(
+      "/api/tenant/quotas/preview",
+      { body: query },
     );
   }
 }

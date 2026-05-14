@@ -4,7 +4,10 @@ import type {
   CreateTenantBookingCommand,
   PartnerEligibilityVerificationRecord,
   TenantAddressRecord,
+  TenantBookingQuotaImpactPreview,
+  TenantCostCenterRecord,
   TenantPassengerRecord,
+  TenantQuotaSummary,
 } from "@drts/contracts";
 import { BUSINESS_DISPATCH_SUBTYPES } from "@drts/contracts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -30,7 +33,8 @@ import {
   partnerAccentStyle,
 } from "@/lib/drtsApi";
 import { toDatetimeLocalValue, toErrorMessage } from "@/lib/formatting";
-import { Info, User, Car, HelpCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Info, User, Car, HelpCircle, AlertTriangle, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 type VehiclePreferenceValue = "human_driver" | "autonomous" | "no_preference";
@@ -131,6 +135,14 @@ export default function NewBooking() {
   const { client, partnerEntry, isPartnerMode } = useAuth();
   const [passengers, setPassengers] = useState<TenantPassengerRecord[]>([]);
   const [addresses, setAddresses] = useState<TenantAddressRecord[]>([]);
+  const [costCenters, setCostCenters] = useState<TenantCostCenterRecord[]>([]);
+  const [tenantQuota, setTenantQuota] = useState<TenantQuotaSummary | null>(
+    null,
+  );
+  const [quotaPreview, setQuotaPreview] =
+    useState<TenantBookingQuotaImpactPreview | null>(null);
+  const [previewingQuota, setPreviewingQuota] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [form, setForm] = useState<BookingFormState>(defaultForm);
   const [cardLast4, setCardLast4] = useState("");
   const [referenceToken, setReferenceToken] = useState("");
@@ -147,6 +159,61 @@ export default function NewBooking() {
     setReferenceToken("");
     setEligibilityVerification(null);
     setError(null);
+    setQuotaPreview(null);
+    setPreviewError(null);
+  };
+
+  // Map known canonical API error codes to user-actionable messages.
+  // Falls back to toErrorMessage(...) when no code matches.
+  const friendlyBookingError = (raw: unknown): string => {
+    const message = toErrorMessage(raw);
+    const codeMap: Record<string, string> = {
+      BOOKING_COST_CENTER_INVALID:
+        "成本中心代碼格式不正確（應為大寫英數與連字號）。",
+      BOOKING_COST_CENTER_UNKNOWN:
+        "找不到所選成本中心。可能已被停用或不在此租戶目錄中。",
+      BOOKING_COST_CENTER_DISABLED:
+        "所選成本中心已被停用，請選擇其他啟用中的成本中心。",
+      QUOTA_INSUFFICIENT_AT_COMMIT:
+        "額度已被其他預訂佔用，請重新檢查後再送出。",
+      APPROVAL_NOT_AUTHORIZED:
+        "您不是此預訂的審批人。請聯絡有效審批人。",
+      APPROVAL_NO_RESOLVABLE_APPROVERS:
+        "此規則沒有可解析的審批人，請通知 tenant_admin 設定。",
+    };
+    for (const [code, label] of Object.entries(codeMap)) {
+      if (message.includes(code)) {
+        return label;
+      }
+    }
+    return message;
+  };
+
+  const handlePreviewQuota = async () => {
+    if (!client) {
+      return;
+    }
+    if (!form.costCenter.trim() || !form.reservationWindowStart) {
+      setPreviewError("請先選擇成本中心並填寫預約起始時間。");
+      return;
+    }
+    setPreviewError(null);
+    setPreviewingQuota(true);
+    try {
+      const result = await client.previewTenantBookingQuotaImpact({
+        costCenterCode: form.costCenter.trim(),
+        reservationWindowStart: new Date(
+          form.reservationWindowStart,
+        ).toISOString(),
+        businessDispatchSubtype: form.businessDispatchSubtype,
+      });
+      setQuotaPreview(result);
+    } catch (previewErr) {
+      setQuotaPreview(null);
+      setPreviewError(friendlyBookingError(previewErr));
+    } finally {
+      setPreviewingQuota(false);
+    }
   };
 
   useEffect(() => {
@@ -159,15 +226,27 @@ export default function NewBooking() {
     const load = async () => {
       setLoading(true);
       try {
-        const [nextPassengers, nextAddresses] = await Promise.all([
+        const [
+          nextPassengers,
+          nextAddresses,
+          nextCostCenters,
+          nextQuota,
+        ] = await Promise.all([
           client.listPassengers(),
           client.listAddresses(),
+          // Cost-center + quota are tenant-side governance reads; partner-mode
+          // login may not be authorized for them, so fall back to empty rather
+          // than failing the whole booking form.
+          client.listCostCenters({ activeOnly: true }).catch(() => []),
+          client.getTenantQuotaSummary().catch(() => null),
         ]);
         if (!active) {
           return;
         }
         setPassengers(nextPassengers.filter((passenger) => passenger.activeFlag));
         setAddresses(nextAddresses.filter((address) => address.activeFlag));
+        setCostCenters(nextCostCenters);
+        setTenantQuota(nextQuota);
         setError(null);
       } catch (loadError) {
         if (!active) {
@@ -390,8 +469,15 @@ export default function NewBooking() {
         navigate("/booking-list");
       }
     } catch (submitError) {
-      setError(toErrorMessage(submitError));
-      toast.error(toErrorMessage(submitError));
+      const friendly = friendlyBookingError(submitError);
+      setError(friendly);
+      toast.error(friendly);
+      // If this was a quota race at commit, force a fresh preview so the user
+      // can see updated remaining quota before retrying.
+      if (toErrorMessage(submitError).includes("QUOTA_INSUFFICIENT_AT_COMMIT")) {
+        setQuotaPreview(null);
+        void handlePreviewQuota();
+      }
     } finally {
       setSaving(false);
     }
@@ -672,15 +758,137 @@ export default function NewBooking() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>成本中心</Label>
-                <Input
-                  value={form.costCenter}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      costCenter: event.target.value,
-                    }))
-                  }
-                />
+                {costCenters.length > 0 ? (
+                  <Select
+                    value={form.costCenter || "__none__"}
+                    onValueChange={(value) => {
+                      setForm((current) => ({
+                        ...current,
+                        costCenter: value === "__none__" ? "" : value,
+                      }));
+                      setQuotaPreview(null);
+                      setPreviewError(null);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="選擇成本中心" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">不指定</SelectItem>
+                      {costCenters.map((cc) => (
+                        <SelectItem key={cc.code} value={cc.code}>
+                          <span className="font-mono text-xs">{cc.code}</span>{" "}
+                          <span>{cc.name}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <>
+                    <Input
+                      value={form.costCenter}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          costCenter: event.target.value,
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      此租戶尚未建立成本中心目錄；目前接受 free-text。建立目錄後此欄位會自動切換成下拉選單。
+                    </p>
+                  </>
+                )}
+                {form.costCenter && form.reservationWindowStart && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handlePreviewQuota()}
+                      disabled={previewingQuota}
+                    >
+                      {previewingQuota ? "預覽中…" : "預覽額度影響"}
+                    </Button>
+                    {tenantQuota?.usage?.amountMinorRemaining != null && (
+                      <span className="text-xs text-muted-foreground">
+                        租戶月剩餘：
+                        {tenantQuota.usage.amountMinorRemaining.toLocaleString()}{" "}
+                        ({tenantQuota.usage.remainingPercent ?? "—"}%)
+                      </span>
+                    )}
+                  </div>
+                )}
+                {previewError && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-50 p-2 text-xs text-amber-800">
+                    {previewError}
+                  </div>
+                )}
+                {quotaPreview && (
+                  <div className="rounded-md border bg-background p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <Badge
+                        variant={
+                          quotaPreview.combinedTriggered === "block"
+                            ? "destructive"
+                            : quotaPreview.combinedTriggered === "approval"
+                              ? "secondary"
+                              : quotaPreview.combinedTriggered === "warn"
+                                ? "outline"
+                                : "default"
+                        }
+                      >
+                        {quotaPreview.combinedTriggered === "block"
+                          ? "封鎖"
+                          : quotaPreview.combinedTriggered === "approval"
+                            ? "需審批"
+                            : quotaPreview.combinedTriggered === "warn"
+                              ? "警示"
+                              : "OK"}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        期間 {quotaPreview.periodKey}
+                      </span>
+                    </div>
+                    {quotaPreview.combinedTriggered === "approval" && (
+                      <div className="mb-2 flex items-center gap-2 text-xs text-amber-800">
+                        <ShieldCheck className="h-3 w-3" />
+                        此預訂送出後將進入審批流程。
+                      </div>
+                    )}
+                    {quotaPreview.combinedTriggered === "block" && (
+                      <div className="mb-2 flex items-center gap-2 text-xs text-rose-700">
+                        <AlertTriangle className="h-3 w-3" />
+                        額度已超過硬限制，此預訂將被封鎖。
+                      </div>
+                    )}
+                    {quotaPreview.impacts.length > 0 && (
+                      <div className="space-y-1 text-xs">
+                        {quotaPreview.impacts.map((impact, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1"
+                          >
+                            <span>
+                              {impact.scope === "tenant" ? "租戶" : "成本中心"}{" "}
+                              · {impact.dimension}
+                            </span>
+                            <span>
+                              剩餘{" "}
+                              {impact.remainingAfter != null
+                                ? impact.remainingAfter.toLocaleString()
+                                : "—"}{" "}
+                              ({impact.enforcementMode})
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      預覽為非綁定，commit 時會以最新額度為準。
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>偏好用車類型 *</Label>
